@@ -2,6 +2,9 @@
 Core conversion module for Markdown to WeChat Public Account HTML.
 """
 import re
+import os
+import tempfile
+import base64
 from dataclasses import dataclass, field
 from typing import Any, Optional, List
 from html import escape as html_escape
@@ -16,85 +19,82 @@ from pygments.token import (
 )
 
 
+ONEDARK_COLORS = {
+    'comment': '#5c6370',
+    'keyword': '#c678dd',
+    'operator': '#56b6c2',
+    'punctuation': '#abb2bf',
+    'string': '#98c379',
+    'number': '#d19a66',
+    'function': '#61aeee',
+    'class': '#e6c07b',
+    'variable': '#e06c75',
+    'constant': '#d19a66',
+    'attribute': '#d19a66',
+    'tag': '#e06c75',
+    'name': '#e06c75',
+    'builtin': '#e6c07b',
+    'type': '#e5c07b',
+    'literal': '#56b6c2',
+    'entity': '#56b6c2',
+    'rx': '#98c379',
+    'symbol': '#56b6c2',
+    'error': '#e06c75',
+    'deprecated': '#5c6370',
+    'generic': '#abb2bf',
+    'heading': '#61aeee',
+    'strong': '#e06c75',
+    'emphasis': '#c678dd',
+    'deleted': '#e06c75',
+    'inserted': '#98c379',
+    'changed': '#e5c07b',
+}
+
+
+def get_token_color(token_type):
+    """Get color for a token type hierarchy."""
+    while token_type:
+        type_str = str(token_type)
+        for key, color in ONEDARK_COLORS.items():
+            if key in type_str.lower():
+                return color
+        token_type = token_type.parent
+    return '#abb2bf'
+
+
+class WeChatCodeFormatter(HtmlFormatter):
+    """Custom formatter that outputs inline styles with actual colors for WeChat."""
+    
+    def __init__(self, **options):
+        options['nowrap'] = True
+        options['linenos'] = False
+        super().__init__(**options)
+    
+    def format(self, tokensource, outfile):
+        """Format tokens and output inline styles."""
+        for ttype, value in tokensource:
+            while ttype not in self.style and ttype.parent:
+                ttype = ttype.parent
+            
+            if ttype in self.style:
+                style = self.style[ttype]
+                color = style['color'] if style.get('color') else get_token_color(ttype)
+            else:
+                color = get_token_color(ttype)
+            
+            if value.strip():
+                escaped = html_escape(value)
+                outfile.write(f'<span style="color:{color};">{escaped}</span>')
+            else:
+                outfile.write(html_escape(value))
+
+
 WECHAT_SAFE_TAGS = {
     'section', 'header', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'del',
     'p', 'br', 'span', 'a', 'img', 'blockquote', 'pre', 'code',
     'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'ruby', 'rt', 'sup', 'sub', 'section'
-}
-
-
-PYGMENTS_STYLES = {
-    Keyword: 'color:#d73a49;font-weight:bold;',
-    Keyword.Constant: 'color:#005cc5;',
-    Keyword.Declaration: 'color:#6f42c1;',
-    Keyword.Namespace: 'color:#e36209;',
-    Keyword.Pseudo: 'color:#e36209;',
-    Keyword.Reserved: 'color:#6f42c1;',
-    Keyword.Type: 'color:#005cc5;',
-    Name: 'color:#24292e;',
-    Name.Attribute: 'color:#6f42c1;',
-    Name.Builtin: 'color:#005cc5;',
-    Name.Builtin.Pseudo: 'color:#005cc5;',
-    Name.Class: 'color:#6f42c1;',
-    Name.Constant: 'color:#005cc5;',
-    Name.Decorator: 'color:#6f42c1;',
-    Name.Entity: 'color:#6f42c1;',
-    Name.Exception: 'color:#e36209;',
-    Name.Function: 'color:#6f42c1;',
-    Name.Property: 'color:#24292e;',
-    Name.Label: 'color:#24292e;',
-    Name.Namespace: 'color:#24292e;',
-    Name.Other: 'color:#24292e;',
-    Name.Tag: 'color:#22863a;',
-    Name.Variable: 'color:#e36209;',
-    Name.Variable.Class: 'color:#6f42c1;',
-    Name.Variable.Global: 'color:#e36209;',
-    Name.Variable.Instance: 'color:#e36209;',
-    Number: 'color:#005cc5;',
-    Number.Float: 'color:#005cc5;',
-    Number.Hex: 'color:#005cc5;',
-    Number.Integer: 'color:#005cc5;',
-    Number.Integer.Long: 'color:#005cc5;',
-    Number.Oct: 'color:#005cc5;',
-    Operator: 'color:#d73a49;',
-    Operator.Word: 'color:#d73a49;',
-    Punctuation: 'color:#24292e;',
-    String: 'color:#032f62;',
-    String.Affix: 'color:#032f62;',
-    String.Backtick: 'color:#032f62;',
-    String.Char: 'color:#032f62;',
-    String.Delimiter: 'color:#24292e;',
-    String.Doc: 'color:#6a737d;',
-    String.Double: 'color:#032f62;',
-    String.Escape: 'color:#e36209;',
-    String.Heredoc: 'color:#032f62;',
-    String.Interpol: 'color:#032f62;',
-    String.Other: 'color:#032f62;',
-    String.Regex: 'color:#032f62;',
-    String.Single: 'color:#032f62;',
-    String.Symbol: 'color:#032f62;',
-    Comment: 'color:#6a737d;font-style:italic;',
-    Comment.Multiline: 'color:#6a737d;font-style:italic;',
-    Comment.Preproc: 'color:#6a737d;',
-    Comment.PreprocFile: 'color:#6a737d;',
-    Comment.Single: 'color:#6a737d;font-style:italic;',
-    Comment.Special: 'color:#6a737d;font-style:italic;',
-    Generic: 'color:#24292e;',
-    Generic.Deleted: 'color:#b31d28;',
-    Generic.Emph: 'font-style:italic;',
-    Generic.Error: 'color:#b31d28;',
-    Generic.Heading: 'font-weight:bold;',
-    Generic.Inserted: 'color:#22863a;',
-    Generic.Output: 'color:#24292e;',
-    Generic.Prompt: 'color:#005cc5;',
-    Generic.Strong: 'font-weight:bold;',
-    Generic.Subheading: 'font-weight:bold;',
-    Generic.Traceback: 'color:#b31d28;',
-    Error: 'color:#b31d28;',
-    Token: 'color:#24292e;',
-    Whitespace: 'color:#24292e;',
 }
 
 
@@ -115,123 +115,6 @@ class ToolResult:
         }
 
 
-def get_inline_style_for_token(token_type):
-    """Get inline style for a Pygments token type."""
-    while token_type:
-        if token_type in PYGMENTS_STYLES:
-            return PYGMENTS_STYLES[token_type]
-        token_type = token_type.parent
-    return 'color:#24292e;'
-
-
-PYGMENTS_ABBREV_MAP = {
-    'k': 'Keyword',
-    'kc': 'Keyword.Constant',
-    'kd': 'Keyword.Declaration',
-    'kn': 'Keyword.Namespace',
-    'kp': 'Keyword.Pseudo',
-    'kr': 'Keyword.Reserved',
-    'kt': 'Keyword.Type',
-    'n': 'Name',
-    'na': 'Name.Attribute',
-    'nb': 'Name.Builtin',
-    'bp': 'Name.Builtin.Pseudo',
-    'nc': 'Name.Class',
-    'no': 'Name.Constant',
-    'nd': 'Name.Decorator',
-    'ni': 'Name.Entity',
-    'ne': 'Name.Exception',
-    'nf': 'Name.Function',
-    'py': 'Name.Property',
-    'nl': 'Name.Label',
-    'nn': 'Name.Namespace',
-    'nx': 'Name.Other',
-    'nt': 'Name.Tag',
-    'nv': 'Name.Variable',
-    'vc': 'Name.Variable.Class',
-    'vg': 'Name.Variable.Global',
-    'vi': 'Name.Variable.Instance',
-    'o': 'Operator',
-    'ow': 'Operator.Word',
-    'p': 'Punctuation',
-    's': 'String',
-    'sa': 'String.Affix',
-    'sb': 'String.Backtick',
-    'sc': 'String.Char',
-    'dl': 'String.Delimiter',
-    'sd': 'String.Doc',
-    'se': 'String.Escape',
-    'sh': 'String.Heredoc',
-    'si': 'String.Interpol',
-    'sx': 'String.Other',
-    'sr': 'String.Regex',
-    's1': 'String.Single',
-    's2': 'String.Double',
-    'ss': 'String.Symbol',
-    'm': 'Number',
-    'mf': 'Number.Float',
-    'mh': 'Number.Hex',
-    'mi': 'Number.Integer',
-    'il': 'Number.Integer.Long',
-    'mo': 'Number.Oct',
-    'c': 'Comment',
-    'cm': 'Comment.Multiline',
-    'cp': 'Comment.Preproc',
-    'cpf': 'Comment.PreprocFile',
-    'cs': 'Comment.Single',
-    'c1': 'Comment.Single',
-    'c2': 'Comment.Special',
-    'g': 'Generic',
-    'gd': 'Generic.Deleted',
-    'ge': 'Generic.Emph',
-    'gr': 'Generic.Error',
-    'gh': 'Generic.Heading',
-    'gi': 'Generic.Inserted',
-    'go': 'Generic.Output',
-    'gp': 'Generic.Prompt',
-    'gs': 'Generic.Strong',
-    'gu': 'Generic.Subheading',
-    'gt': 'Generic.Traceback',
-    'x': 'Error',
-    'err': 'Error',
-    'w': 'Whitespace',
-    '': 'Token',
-}
-
-
-def highlight_with_inline_styles(code, lexer):
-    """Highlight code and return HTML with inline styles."""
-    formatter = HtmlFormatter(nowrap=True, cssclass='')
-    highlighted = highlight(code, lexer, formatter)
-    
-    style_map = {}
-    for abbrev, full_name in PYGMENTS_ABBREV_MAP.items():
-        parts = full_name.split('.')
-        token_type = Token
-        for part in parts:
-            if part:
-                token_type = getattr(token_type, part, None)
-                if token_type is None:
-                    break
-        if token_type and token_type in PYGMENTS_STYLES:
-            color_match = re.search(r'color:([^;]+)', PYGMENTS_STYLES[token_type])
-            if color_match:
-                style_map[abbrev] = color_match.group(1)
-    
-    def replace_span(match):
-        token_abbrev = match.group(1)
-        content = match.group(2)
-        
-        if token_abbrev in style_map:
-            return f'<span style="color:{style_map[token_abbrev]};">{content}</span>'
-        return f'<span>{content}</span>'
-    
-    result = re.sub(r'<span class="([^"]+)">([^<]*)</span>', replace_span, highlighted)
-    result = re.sub(r'<span class="([^"]+)">([^<]*)</span>', replace_span, result)
-    
-    return result
-
-
 class WeChatRenderer(mistune.HTMLRenderer):
     """Renderer that produces WeChat-compatible HTML from Markdown."""
     
@@ -240,7 +123,7 @@ class WeChatRenderer(mistune.HTMLRenderer):
         self._code_blocks: List[str] = []
     
     def block_code(self, code: str, info: str = None, **attrs) -> str:
-        """Render code block with syntax highlighting using inline styles."""
+        """Render code block with syntax highlighting and WeChat-compatible styling."""
         lang = None
         if info:
             lang = info.split()[0] if info else None
@@ -254,32 +137,57 @@ class WeChatRenderer(mistune.HTMLRenderer):
             lexer = TextLexer()
         
         try:
-            highlighted = highlight_with_inline_styles(code, lexer)
+            formatter = WeChatCodeFormatter()
+            highlighted = highlight(code, lexer, formatter)
         except:
-            highlighted = f'<code style="color:#24292e;">{html_escape(code)}</code>'
+            highlighted = html_escape(code)
         
-        highlighted = highlighted.strip()
         uid = f'code-{len(self._code_blocks)}'
         self._code_blocks.append(highlighted)
         
-        placeholder = f'<code style="background:#f6f8fa;padding:2px 6px;border-radius:3px;font-family:monospace;font-size:13px;overflow:hidden;">{html_escape(code[:50])}...</code>'
-        return f'<pre style="background:#f6f8fa;border-radius:6px;padding:15px;overflow-x:auto;margin:15px 0;font-family:monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-all;">{highlighted}</pre>\n'
+        styled_pre = (
+            f'<pre class="custom" style="'
+            f'border-radius:5px;'
+            f'box-shadow:rgba(0,0,0,0.55) 0px 2px 10px;'
+            f'margin:10px 0;'
+            f'overflow-x:auto;'
+            f'">'
+            f'<span style="display:block;background:url(https://files.mdnice.com/user/3441/876cad08-0422-409d-bb5a-08afec5da8ee.svg);height:30px;width:100%;background-size:40px;background-repeat:no-repeat;background-color:#282c34;margin-bottom:-7px;border-radius:5px;background-position:10px 10px;"></span>'
+            f'<code class="hljs" style="'
+            f'overflow-x:auto;'
+            f'padding:16px;'
+            f'color:#abb2bf;'
+            f'padding-top:15px;'
+            f'background:#282c34;'
+            f'border-radius:5px;'
+            f'display:-webkit-box;'
+            f'font-family:Consolas,Monaco,Menlo,monospace;'
+            f'font-size:12px;'
+            f'line-height:1.5;'
+            f'">'
+            f'{highlighted}'
+            f'</code>'
+            f'</pre>'
+        )
+        
+        placeholder = f'<code class="code-block" data-id="{uid}"></code>'
+        return f'{styled_pre}\n'
     
     def render_image(self, src: str, alt: str = '', title: str = None, **attrs) -> str:
         """Render image with WeChat-compatible attributes."""
         alt_attr = f' alt="{html_escape(alt)}"' if alt else ''
         title_attr = f' title="{html_escape(title)}"' if title else ''
-        return f'<img src="{html_escape(src)}"{alt_attr}{title_attr} style="max-width:100%;height:auto;display:block;margin:10px 0;"/>\n'
+        return f'<img src="{html_escape(src)}"{alt_attr}{title_attr} style="max-width:100%;height:auto;"/>\n'
     
     def render_link(self, link: str, text: str = None, title: str = None, **attrs) -> str:
         """Render link with WeChat-compatible format."""
         text = text or link
         title_attr = f' title="{html_escape(title)}"' if title else ''
-        return f'<a href="{html_escape(link)}"{title_attr} style="color:#576b95;text-decoration:none;">{text}</a>'
+        return f'<a href="{html_escape(link)}"{title_attr} style="color:#576b95;">{text}</a>'
     
-    def render_quote(self, text: str, **attrs) -> str:
-        """Render blockquote with WeChat styling."""
-        return f'<blockquote style="border-left:3px solid #e5e5e5;padding:5px 10px;margin:10px 0;color:#666;background:#f9f9f9;">{text}</blockquote>\n'
+    def block_quote(self, text: str, **attrs) -> str:
+        """Render blockquote with WeChat styling like mdnice."""
+        return f'<blockquote style="border-left:3px solid rgba(0,0,0,0.4);padding:10px 10px 10px 20px;margin:10px 0;background:rgba(0,0,0,0.05);">{text}</blockquote>\n'
     
     def render_table(self, text: str, head: str = None, **attrs) -> str:
         """Render table with WeChat-compatible styling."""
@@ -331,7 +239,7 @@ class WeChatRenderer(mistune.HTMLRenderer):
     
     def codespan(self, text: str) -> str:
         """Render inline code with styling."""
-        return f'<code style="background:#f6f8fa;padding:2px 6px;border-radius:3px;font-family:monospace;font-size:13px;color:#e83e8c;">{html_escape(text)}</code>'
+        return f'<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px;font-family:Consolas,Monaco,Menlo,monospace;font-size:13px;color:#1e6bb8;">{html_escape(text)}</code>'
     
     def get_code_blocks(self) -> List[str]:
         """Get all code blocks for separate rendering."""
@@ -342,42 +250,43 @@ class WeChatRenderer(mistune.HTMLRenderer):
         self._code_blocks = []
 
 
-def create_latex_plugin():
-    """Create a LaTeX math plugin for mistune."""
-    def latex_block(md, text, level, info):
-        return f'<div style="text-align:center;margin:15px 0;padding:10px;background:#f9f9f9;border-radius:4px;font-size:16px;">{text}</div>\n'
-    
-    def latex_inline(md, text):
-        return f'<span style="font-size:16px;padding:0 4px;">{text}</span>'
-    
-    def parse_latex_block(block):
-        pattern = re.compile(r'\$\$(.+?)\$\$', re.DOTALL)
-        def replace(match):
-            content = match.group(1).strip()
-            return f'\n\n latex_block_start {content} latex_block_end \n\n'
-        return pattern.sub(replace, block)
-    
-    def parse_latex_inline(inline):
-        pattern = re.compile(r'\$(.+?)\$', re.DOTALL)
-        def replace(match):
-            content = match.group(1).strip()
-            return f' latex_inline_start {content} latex_inline_end '
-        return pattern.sub(replace, inline)
-    
-    class LatexInlineGrammar:
-        inline_math = re.compile(r'\$\$(.+?)\$\$|\$(.+?)\$')
-    
-    class LatexInlineRenderer:
-        def latex_math(self, text, info=None):
-            if text.startswith('$') and text.endswith('$'):
-                content = text[2:-2].strip()
-                return f'<span style="font-size:16px;padding:0 4px;">{content}</span>'
-            return f'<span style="font-size:16px;padding:0 4px;">{text}</span>'
-    
-    from mistune.renderers import Renderer
-    from mistune.core import BlockState, InlineState
-    
-    return latex_block, latex_inline
+def render_latex_to_katex(latex: str, display: bool = True) -> Optional[str]:
+    """
+    Render LaTeX formula to HTML using KaTeX.
+    Returns HTML string with inline styles, or None if rendering fails.
+    """
+    try:
+        import subprocess
+        import json
+        import os
+        
+        pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        katex_path = os.path.join(pkg_dir, 'node_modules', 'katex')
+        
+        node_script = f'''
+const katex = require('{katex_path}');
+const html = katex.renderToString({json.dumps(latex)}, {{
+    displayMode: {str(display).lower()},
+    throwOnError: false,
+    trust: true,
+    strict: false
+}});
+console.log(html);
+'''
+        
+        result = subprocess.run(
+            ['node', '-e', node_script],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        else:
+            return None
+    except Exception as e:
+        return None
 
 
 def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
@@ -434,6 +343,8 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
         )
 
 
+import io
+
 LATEX_BLOCK_PATTERN = re.compile(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', re.DOTALL)
 LATEX_INLINE_PATTERN = re.compile(r'latex_inline_start(.+?)latex_inline_end')
 
@@ -446,14 +357,20 @@ def process_latex(text):
 
 
 def post_process_latex(text):
-    """Convert LaTeX markers to final HTML."""
+    """Convert LaTeX markers to final HTML with KaTeX rendered content."""
     def latex_block_replace(match):
         content = match.group(1).strip()
-        return f'<div style="text-align:center;margin:15px 0;padding:15px;background:#f9f9f9;border-radius:8px;font-size:16px;line-height:1.8;font-family:Times New Roman,serif;">{content}</div>'
+        katex_html = render_latex_to_katex(content, display=True)
+        if katex_html:
+            return f'<div style="text-align:center;margin:10px 0;">{katex_html}</div>'
+        return f'<p style="text-align:center;font-family:serif;">{content}</p>'
     
     def latex_inline_replace(match):
         content = match.group(1).strip()
-        return f'<span style="font-size:16px;padding:0 2px;font-family:Times New Roman,serif;">{content}</span>'
+        katex_html = render_latex_to_katex(content, display=False)
+        if katex_html:
+            return katex_html
+        return f'<span style="font-family:serif;">{content}</span>'
     
     text = re.sub(r'<p>\s*\$\$(.+?)\$\$\s*</p>', latex_block_replace, text, flags=re.DOTALL)
     text = re.sub(r'\$\$(.+?)\$\$', latex_block_replace, text, flags=re.DOTALL)
@@ -522,90 +439,32 @@ def create_wechat_html_document(title: str, content: str, author: str = None) ->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{escape_html(title)}</title>
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            font-size: 16px;
-            line-height: 1.8;
-            color: #333;
-            max-width: 100%;
-            padding: 10px;
-            margin: 0 auto;
-        }}
-        h1, h2, h3, h4, h5, h6 {{
-            font-weight: bold;
-            line-height: 1.3;
-            margin: 20px 0 10px;
-        }}
-        h1 {{ font-size: 24px; }}
-        h2 {{ font-size: 22px; }}
-        h3 {{ font-size: 20px; }}
-        h4 {{ font-size: 18px; }}
-        h5 {{ font-size: 16px; }}
-        h6 {{ font-size: 15px; }}
-        p {{ margin: 10px 0; }}
-        a {{ color: #576b95; text-decoration: none; }}
-        img {{ max-width: 100%; height: auto; display: block; margin: 10px 0; }}
-        blockquote {{
-            border-left: 3px solid #e5e5e5;
-            padding: 5px 10px;
-            margin: 10px 0;
-            color: #666;
-            background: #f9f9f9;
-        }}
-        pre {{
-            background: #f6f8fa;
-            border-radius: 6px;
-            padding: 15px;
-            overflow-x: auto;
-            margin: 15px 0;
-            font-family: "SF Mono", Consolas, Monaco, monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }}
-        code {{
-            background: #f6f8fa;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: "SF Mono", Consolas, Monaco, monospace;
-            font-size: 13px;
-        }}
-        table {{
-            border-collapse: collapse;
-            width: 100%;
-            margin: 10px 0;
-        }}
-        th, td {{
-            border: 1px solid #e5e5e5;
-            padding: 8px;
-            text-align: left;
-        }}
-        th {{
-            background: #f6f8fa;
-        }}
-        ul, ol {{
-            margin: 10px 0;
-            padding-left: 20px;
-        }}
-        li {{
-            margin: 5px 0;
-        }}
-        hr {{
-            border: none;
-            border-top: 1px solid #e5e5e5;
-            margin: 20px 0;
-        }}
-    </style>
 </head>
 <body>
-    <h1 style="text-align:center;">{escape_html(title)}</h1>
+    <h1 style="text-align:center;font-size:24px;font-weight:bold;margin:20px 0;">{escape_html(title)}</h1>
     {author_html}
-    <div class="content">
+    <div>
         {content}
     </div>
 </body>
 </html>'''
     
     return doc
+
+
+def create_wechat_copy_html(title: str, content: str, author: str = None) -> str:
+    """
+    Create WeChat-compatible HTML specifically for copying to clipboard.
+    Preserves inline styles and code blocks that WeChat supports.
+    """
+    author_html = f'<p style="text-align:right;color:#999;font-size:14px;">文/{author or ""}</p>' if author else ''
+    
+    html = f'''<div>
+<h1 style="font-size:24px;font-weight:bold;text-align:center;margin:16px 0;">{escape_html(title)}</h1>
+{author_html}
+<div>
+{content}
+</div>
+</div>'''
+    
+    return html

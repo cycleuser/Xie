@@ -3,7 +3,11 @@ Web interface for xie using Flask.
 """
 from flask import Flask, render_template, jsonify, request
 
-from xie.core import convert_markdown_to_wechat, create_wechat_html_document
+from xie.core import (
+    convert_markdown_to_wechat, 
+    create_wechat_html_document,
+    create_wechat_copy_html
+)
 
 
 app = Flask(__name__, template_folder='templates')
@@ -50,6 +54,45 @@ def convert():
         "success": True,
         "html": html_content,
         "code_blocks": result.data['code_blocks'],
+        "metadata": result.metadata
+    })
+
+
+@app.route("/api/convert-for-copy", methods=["POST"])
+def convert_for_copy():
+    """Convert markdown to HTML specifically optimized for copying to WeChat."""
+    data = request.json
+    
+    if not data or 'markdown' not in data:
+        return jsonify({
+            "success": False,
+            "error": "Missing 'markdown' field in request body"
+        }), 400
+    
+    markdown_text = data['markdown']
+    title = data.get('title', 'Untitled')
+    author = data.get('author')
+    
+    result = convert_markdown_to_wechat(markdown_text)
+    
+    if not result.success:
+        return jsonify({
+            "success": False,
+            "error": result.error
+        }), 500
+    
+    html_content = result.data['html']
+    
+    copy_html = create_wechat_copy_html(
+        title=title,
+        content=html_content,
+        author=author
+    )
+    
+    return jsonify({
+        "success": True,
+        "html": copy_html,
+        "code_blocks": result.data.get('code_blocks', []),
         "metadata": result.metadata
     })
 
