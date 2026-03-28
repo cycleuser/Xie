@@ -248,25 +248,31 @@ def hello():
 
 
 class TestLatex:
-    """Tests for LaTeX math support."""
+    """Tests for LaTeX math support using KaTeX."""
     
     def test_inline_latex(self):
-        """Test inline LaTeX math."""
+        """Test inline LaTeX math rendered by KaTeX."""
         result = convert_markdown_to_wechat(r"Inline: $x^2 + y^2 = z^2$")
         assert result.success
-        assert 'x^2' in result.data['html']
+        html = result.data['html']
+        assert 'katex' in html
+        assert '<math' not in html
     
     def test_block_latex(self):
-        """Test block LaTeX math."""
+        """Test block LaTeX math rendered by KaTeX."""
         result = convert_markdown_to_wechat(r"$$\int_0^\infty e^{-x^2} dx$$")
         assert result.success
-        assert 'img' in result.data['html'] or 'int_0' in result.data['html']
+        html = result.data['html']
+        assert 'katex-display' in html
+        assert '<math' not in html
     
     def test_latex_with_frac(self):
-        """Test LaTeX with fractions."""
+        """Test LaTeX with fractions rendered by KaTeX."""
         result = convert_markdown_to_wechat(r"$$\frac{\sqrt{\pi}}{2}$$")
         assert result.success
-        assert 'frac' in result.data['html'] or 'img' in result.data['html']
+        html = result.data['html']
+        assert 'katex-display' in html
+        assert '<math' not in html
 
 
 class TestCodeHighlighting:

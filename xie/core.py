@@ -254,6 +254,7 @@ def render_latex_to_katex(latex: str, display: bool = True) -> Optional[str]:
     """
     Render LaTeX formula to HTML using KaTeX.
     Returns HTML string with inline styles, or None if rendering fails.
+    Strips MathML wrapper for WeChat compatibility (WeChat doesn't support MathML).
     """
     try:
         import subprocess
@@ -271,7 +272,17 @@ const html = katex.renderToString({json.dumps(latex)}, {{
     trust: true,
     strict: false
 }});
-console.log(html);
+// Strip MathML wrapper - WeChat doesn't support <math> tags
+// Keep only the visual katex-html content
+const mathmlMatch = html.match(/<span class="katex-mathml">.*?<\\/span>/s);
+let visualHtml = html;
+if (mathmlMatch) {{
+    // Remove the MathML span but keep the rest
+    visualHtml = html.replace(/<span class="katex-mathml">.*?<\\/span>/s, '');
+}}
+// Also remove the aria-hidden attribute
+visualHtml = visualHtml.replace(/ aria-hidden="true"/g, '');
+console.log(visualHtml);
 '''
         
         result = subprocess.run(
@@ -284,8 +295,10 @@ console.log(html);
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
         else:
+            print(f"KaTeX error: {result.stderr}")
             return None
     except Exception as e:
+        print(f"KaTeX exception: {e}")
         return None
 
 
@@ -456,7 +469,10 @@ def create_wechat_copy_html(title: str, content: str, author: str = None) -> str
     """
     Create WeChat-compatible HTML specifically for copying to clipboard.
     Preserves inline styles and code blocks that WeChat supports.
+    Simplifies KaTeX HTML for better WeChat compatibility.
     """
+    content = simplify_katex_for_wechat(content)
+    
     author_html = f'<p style="text-align:right;color:#999;font-size:14px;">文/{author or ""}</p>' if author else ''
     
     html = f'''<div>
@@ -466,5 +482,31 @@ def create_wechat_copy_html(title: str, content: str, author: str = None) -> str
 {content}
 </div>
 </div>'''
+    
+    return html
+
+
+def simplify_katex_for_wechat(html: str) -> str:
+    """
+    Simplify KaTeX HTML for WeChat compatibility.
+    Removes complex CSS, keeps essential structure and SVG elements.
+    """
+    import re
+    
+    katex_display_pattern = re.compile(r'<span class="katex-display">(<span class="katex">.*?</span>)</span>', re.DOTALL)
+    html = katex_display_pattern.sub(r'\1', html)
+    
+    katex_pattern = re.compile(r'<span class="katex">(<span class="katex-html">.*?</span>)</span>', re.DOTALL)
+    html = katex_pattern.sub(r'\1', html)
+    
+    html = re.sub(r' style="[^"]*"', '', html)
+    
+    html = re.sub(r'<span class="(strut|pstrut|mspace|mord|mbin|mrel|mpunct|mn|mo|mi|text|vlist-t|vlist-r|vlist-s|mopen|mclose|nulldelimiter|frac-line|hide-tail)[^"]*"></span>', '', html)
+    html = re.sub(r'<span class="(sizing|mtight|msupsub|svg-align|displaystyle|small|large-ops|normal-size)[^"]*">(.*?)</span>', r'\2', html, flags=re.DOTALL)
+    
+    html = re.sub(r'<span class="[^"]*">(<[^>]+>)</span>', r'\1', html)
+    
+    html = re.sub(r'\s+', ' ', html)
+    html = re.sub(r'> <', '><', html)
     
     return html
