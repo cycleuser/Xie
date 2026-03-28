@@ -460,39 +460,43 @@ $x^2$ $$integral$$"></textarea>
                 return;
             }
 
+            const plainText = wechatHtml.replace(/<[^>]+>/g, '').trim();
+
+            if (navigator.clipboard && navigator.clipboard.write) {
+                const blob = new Blob([wechatHtml], { type: 'text/html' });
+                const textBlob = new Blob([plainText], { type: 'text/plain' });
+                const item = new ClipboardItem({ 'text/html': blob, 'text/plain': textBlob });
+                navigator.clipboard.write([item]).then(() => {
+                    showToast('Copied! Paste into WeChat (Ctrl+V)');
+                }).catch(() => {
+                    fallbackCopy(wechatHtml);
+                });
+            } else {
+                fallbackCopy(wechatHtml);
+            }
+        }
+
+        function fallbackCopy(html) {
+            const sel = window.getSelection();
             const copyDiv = document.createElement('div');
-            copyDiv.innerHTML = wechatHtml;
-            copyDiv.style.position = 'fixed';
-            copyDiv.style.left = '-9999px';
-            copyDiv.style.width = '800px';
-            copyDiv.style.padding = '20px';
-            copyDiv.style.background = '#fff';
+            copyDiv.innerHTML = html;
+            copyDiv.style.cssText = 'position:fixed;left:-9999px;width:600px;padding:15px;background:#fff;font-size:14px;line-height:1.6;';
             copyDiv.contentEditable = true;
             document.body.appendChild(copyDiv);
-
             const range = document.createRange();
             range.selectNodeContents(copyDiv);
-            const sel = window.getSelection();
             sel.removeAllRanges();
             sel.addRange(range);
-
             try {
                 document.execCommand('copy');
                 showToast('Copied! Paste into WeChat (Ctrl+V)');
             } catch(e) {
-                navigator.clipboard.writeText(wechatHtml).then(() => {
+                navigator.clipboard.writeText(html).then(() => {
                     showToast('Copied! Paste into WeChat (Ctrl+V)');
                 }).catch(() => {
-                    const ta = document.createElement('textarea');
-                    ta.value = wechatHtml;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                    showToast('Copied as text. Paste and check formatting.');
+                    showToast('Copy failed. Check browser permissions.', 'error');
                 });
             }
-
             document.body.removeChild(copyDiv);
         }
 
