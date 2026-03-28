@@ -1,10 +1,11 @@
 """
 Core conversion module for Markdown to WeChat Public Account HTML.
+Generates HTML compatible with WeChat public account editor, matching mdnice format.
 """
 import re
 import os
-import tempfile
-import base64
+import subprocess
+import json
 from dataclasses import dataclass, field
 from typing import Any, Optional, List
 from html import escape as html_escape
@@ -13,10 +14,6 @@ import mistune
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import HtmlFormatter
-from pygments.token import (
-    Keyword, Name, Comment, String, Error, Number, Operator, Generic,
-    Token, Whitespace, Punctuation
-)
 
 
 ONEDARK_COLORS = {
@@ -84,7 +81,7 @@ class WeChatCodeFormatter(HtmlFormatter):
             
             if value.strip():
                 escaped = html_escape(value)
-                outfile.write(f'<span style="color:{color};">{escaped}</span>')
+                outfile.write(f'<span style="color:{color};line-height:26px;">{escaped}</span>')
             else:
                 outfile.write(html_escape(value))
 
@@ -94,7 +91,7 @@ WECHAT_SAFE_TAGS = {
     'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'del',
     'p', 'br', 'span', 'a', 'img', 'blockquote', 'pre', 'code',
     'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-    'ruby', 'rt', 'sup', 'sub', 'section'
+    'ruby', 'rt', 'sup', 'sub', 'svg', 'path', 'g', 'rect'
 }
 
 
@@ -115,12 +112,29 @@ class ToolResult:
         }
 
 
+DATA_TOOL_ATTR = 'data-tool="mdnice编辑器"'
+WEBSITE_ATTR = 'data-website="https://www.mdnice.com"'
+SECTION_WRAPPER_STYLE = (
+    'margin-top:0px;margin-bottom:0px;margin-left:0px;margin-right:0px;'
+    'padding-top:0px;padding-bottom:0px;padding-left:10px;padding-right:10px;'
+    'background-attachment:scroll;background-clip:border-box;background-color:rgba(0,0,0,0);'
+    'background-image:none;background-origin:padding-box;background-position-x:left;'
+    'background-position-y:top;background-repeat:no-repeat;background-size:auto;'
+    'width:auto;font-family:Optima,Microsoft YaHei,PingFangSC-regular,serif;'
+    'font-size:16px;color:rgb(0,0,0);line-height:1.5em;word-spacing:0em;'
+    'letter-spacing:0em;word-break:break-word;overflow-wrap:break-word;text-align:left;'
+)
+
+
 class WeChatRenderer(mistune.HTMLRenderer):
-    """Renderer that produces WeChat-compatible HTML from Markdown."""
+    """Renderer that produces WeChat-compatible HTML matching mdnice format."""
     
     def __init__(self):
         super().__init__()
         self._code_blocks: List[str] = []
+    
+    def _get_data_tool_attr(self) -> str:
+        return DATA_TOOL_ATTR
     
     def block_code(self, code: str, info: str = None, **attrs) -> str:
         """Render code block with syntax highlighting and WeChat-compatible styling."""
@@ -142,17 +156,19 @@ class WeChatRenderer(mistune.HTMLRenderer):
         except:
             highlighted = html_escape(code)
         
-        uid = f'code-{len(self._code_blocks)}'
         self._code_blocks.append(highlighted)
         
-        styled_pre = (
-            f'<pre class="custom" style="'
+        return (
+            f'<pre class="custom" {self._get_data_tool_attr()} style="'
             f'border-radius:5px;'
             f'box-shadow:rgba(0,0,0,0.55) 0px 2px 10px;'
-            f'margin:10px 0;'
-            f'overflow-x:auto;'
-            f'">'
-            f'<span style="display:block;background:url(https://files.mdnice.com/user/3441/876cad08-0422-409d-bb5a-08afec5da8ee.svg);height:30px;width:100%;background-size:40px;background-repeat:no-repeat;background-color:#282c34;margin-bottom:-7px;border-radius:5px;background-position:10px 10px;"></span>'
+            f'text-align:left;'
+            f'margin-top:10px;margin-bottom:10px;margin-left:0px;margin-right:0px;'
+            f'padding-top:0px;padding-bottom:0px;padding-left:0px;padding-right:0px;">'
+            f'<span style="display:block;'
+            f'background:url(https://files.mdnice.com/user/3441/876cad08-0422-409d-bb5a-08afec5da8ee.svg);'
+            f'height:30px;width:100%;background-size:40px;background-repeat:no-repeat;'
+            f'background-color:#282c34;margin-bottom:-7px;border-radius:5px;background-position:10px 10px;"></span>'
             f'<code class="hljs" style="'
             f'overflow-x:auto;'
             f'padding:16px;'
@@ -162,84 +178,147 @@ class WeChatRenderer(mistune.HTMLRenderer):
             f'border-radius:5px;'
             f'display:-webkit-box;'
             f'font-family:Consolas,Monaco,Menlo,monospace;'
-            f'font-size:12px;'
-            f'line-height:1.5;'
-            f'">'
-            f'{highlighted}'
-            f'</code>'
-            f'</pre>'
+            f'font-size:12px;">{highlighted}<br></code></pre>\n'
         )
-        
-        placeholder = f'<code class="code-block" data-id="{uid}"></code>'
-        return f'{styled_pre}\n'
     
-    def render_image(self, src: str, alt: str = '', title: str = None, **attrs) -> str:
+    def image(self, text: str = '', url: str = '', title: str = None) -> str:
         """Render image with WeChat-compatible attributes."""
+        alt = text or ''
         alt_attr = f' alt="{html_escape(alt)}"' if alt else ''
         title_attr = f' title="{html_escape(title)}"' if title else ''
-        return f'<img src="{html_escape(src)}"{alt_attr}{title_attr} style="max-width:100%;height:auto;"/>\n'
+        return f'<img src="{html_escape(url)}"{alt_attr}{title_attr} style="max-width:100%;height:auto;"/>\n'
     
-    def render_link(self, link: str, text: str = None, title: str = None, **attrs) -> str:
+    def link(self, text: str = '', url: str = '', title: str = None) -> str:
         """Render link with WeChat-compatible format."""
-        text = text or link
+        text = text or url
         title_attr = f' title="{html_escape(title)}"' if title else ''
-        return f'<a href="{html_escape(link)}"{title_attr} style="color:#576b95;">{text}</a>'
+        return f'<a href="{html_escape(url)}"{title_attr} style="color:#576b95;">{text}</a>'
     
     def block_quote(self, text: str, **attrs) -> str:
         """Render blockquote with WeChat styling like mdnice."""
-        return f'<blockquote style="border-left:3px solid rgba(0,0,0,0.4);padding:10px 10px 10px 20px;margin:10px 0;background:rgba(0,0,0,0.05);">{text}</blockquote>\n'
-    
-    def render_table(self, text: str, head: str = None, **attrs) -> str:
-        """Render table with WeChat-compatible styling."""
         return (
-            f'<table style="border-collapse:collapse;width:100%;margin:10px 0;">'
-            f'{head or ""}{text}'
-            f'</table>\n'
+            f'<blockquote class="custom-blockquote multiquote-1" {self._get_data_tool_attr()} style="'
+            f'margin-top:20px;margin-bottom:20px;margin-left:0px;margin-right:0px;'
+            f'padding-top:10px;padding-bottom:10px;padding-left:20px;padding-right:10px;'
+            f'border-top-style:none;border-bottom-style:none;border-left-style:solid;border-right-style:none;'
+            f'border-top-width:3px;border-bottom-width:3px;border-left-width:3px;border-right-width:3px;'
+            f'border-top-color:rgba(0,0,0,0.4);border-bottom-color:rgba(0,0,0,0.4);'
+            f'border-left-color:rgba(0,0,0,0.4);border-right-color:rgba(0,0,0,0.4);'
+            f'border-top-left-radius:0px;border-top-right-radius:0px;'
+            f'border-bottom-right-radius:0px;border-bottom-left-radius:0px;'
+            f'background-attachment:scroll;background-clip:border-box;background-color:rgba(0,0,0,0.05);'
+            f'background-image:none;background-origin:padding-box;background-position-x:left;'
+            f'background-position-y:top;background-repeat:no-repeat;background-size:auto;'
+            f'width:auto;height:auto;box-shadow:rgba(0,0,0,0) 0px 0px 0px 0px;'
+            f'display:block;overflow-x:auto;overflow-y:auto;">'
+            f'<span style="display:none;color:rgb(0,0,0);font-size:16px;line-height:1.5em;'
+            f'letter-spacing:0em;text-align:left;font-weight:normal;"></span>\n{text}</blockquote>\n'
         )
     
-    def render_table_head(self, text: str, **attrs) -> str:
+    def paragraph(self, text: str, **attrs) -> str:
+        """Render paragraph with mdnice-style inline CSS."""
+        return (
+            f'<p {self._get_data_tool_attr()} style="'
+            f'color:rgb(0,0,0);font-size:16px;line-height:1.8em;letter-spacing:0em;'
+            f'text-align:left;text-indent:0em;'
+            f'margin-top:0px;margin-bottom:0px;margin-left:0px;margin-right:0px;'
+            f'padding-top:8px;padding-bottom:8px;padding-left:0px;padding-right:0px;">{text}</p>\n'
+        )
+    
+    def heading(self, text: str, level: int, **attrs) -> str:
+        """Render heading with mdnice-style structure (prefix/content/suffix spans)."""
+        sizes = {1: '24px', 2: '22px', 3: '20px', 4: '18px', 5: '16px', 6: '15px'}
+        size = sizes.get(level, '16px')
+        
+        return (
+            f'<h{level} {self._get_data_tool_attr()} style="'
+            f'margin-top:30px;margin-bottom:15px;margin-left:0px;margin-right:0px;'
+            f'padding-top:0px;padding-bottom:0px;padding-left:0px;padding-right:0px;display:block;">'
+            f'<span class="prefix" style="display:none;"></span>'
+            f'<span class="content" style="font-size:{size};color:rgb(0,0,0);'
+            f'line-height:1.5em;letter-spacing:0em;text-align:left;font-weight:bold;display:block;">{text}</span>'
+            f'<span class="suffix" style="display:none;"></span></h{level}>\n'
+        )
+    
+    def list(self, text: str, ordered: bool = False, **attrs) -> str:
+        """Render list with WeChat-compatible styling."""
+        tag = 'ol' if ordered else 'ul'
+        list_style = 'decimal' if ordered else 'disc'
+        return (
+            f'<{tag} {self._get_data_tool_attr()} style="'
+            f'list-style-type:{list_style};'
+            f'margin-top:8px;margin-bottom:8px;margin-left:0px;margin-right:0px;'
+            f'padding-top:0px;padding-bottom:0px;padding-left:25px;padding-right:0px;'
+            f'color:rgb(0,0,0);">{text}</{tag}>\n'
+        )
+    
+    def list_item(self, text: str, **attrs) -> str:
+        """Render list item with section wrapper."""
+        return (
+            f'<li><section style="'
+            f'margin-top:5px;margin-bottom:5px;'
+            f'color:rgb(1,1,1);font-size:16px;line-height:1.8em;'
+            f'letter-spacing:0em;text-align:left;font-weight:normal;">{text}</section></li>'
+        )
+    
+    def strong(self, text: str, **attrs) -> str:
+        """Render strong text with full inline styles."""
+        return (
+            f'<strong style="color:rgb(0,0,0);font-weight:bold;'
+            f'background-attachment:scroll;background-clip:border-box;background-color:rgba(0,0,0,0);'
+            f'background-image:none;background-origin:padding-box;background-position-x:left;'
+            f'background-position-y:top;background-repeat:no-repeat;background-size:auto;'
+            f'width:auto;height:auto;margin-top:0px;margin-bottom:0px;margin-left:0px;margin-right:0px;'
+            f'padding-top:0px;padding-bottom:0px;padding-left:0px;padding-right:0px;'
+            f'border-top-style:none;border-bottom-style:none;border-left-style:none;border-right-style:none;'
+            f'border-top-width:3px;border-bottom-width:3px;border-left-width:3px;border-right-width:3px;'
+            f'border-top-color:rgba(0,0,0,0.4);border-bottom-color:rgba(0,0,0,0.4);'
+            f'border-left-color:rgba(0,0,0,0.4);border-right-color:rgba(0,0,0,0.4);'
+            f'border-top-left-radius:0px;border-top-right-radius:0px;'
+            f'border-bottom-right-radius:0px;border-bottom-left-radius:0px;">{text}</strong>'
+        )
+    
+    def emphasis(self, text: str, **attrs) -> str:
+        """Render emphasized text."""
+        return f'<em style="font-style:italic;color:rgb(0,0,0);">{text}</em>'
+    
+    def strikethrough(self, text: str, **attrs) -> str:
+        """Render strikethrough text."""
+        return f'<s style="text-decoration:line-through;color:rgb(0,0,0);">{text}</s>'
+    
+    def codespan(self, text: str) -> str:
+        """Render inline code with styling."""
+        return (
+            f'<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px;'
+            f'font-family:Consolas,Monaco,Menlo,monospace;font-size:13px;color:#1e6bb8;">{html_escape(text)}</code>'
+        )
+    
+    def table(self, text: str, **attrs) -> str:
+        """Render table with WeChat-compatible styling."""
+        return (
+            f'<table {self._get_data_tool_attr()} style="'
+            f'border-collapse:collapse;width:100%;margin:10px 0;">{text}</table>\n'
+        )
+    
+    def table_head(self, text: str, **attrs) -> str:
         """Render table head."""
         return f'<thead>{text}</thead>\n'
     
-    def render_table_body(self, text: str, **attrs) -> str:
+    def table_body(self, text: str, **attrs) -> str:
         """Render table body."""
         return f'<tbody>{text}</tbody>\n'
     
-    def render_table_row(self, text: str, **attrs) -> str:
+    def table_row(self, text: str, **attrs) -> str:
         """Render table row."""
         return f'<tr>{text}</tr>\n'
     
-    def render_table_cell(self, text: str, head: bool = False, **attrs) -> str:
+    def table_cell(self, text: str, head: bool = False, **attrs) -> str:
         """Render table cell with borders."""
         tag = 'th' if head else 'td'
         align = attrs.get('align')
         align_style = f' text-align:{align};' if align else ''
         border_style = f'border:1px solid #e5e5e5;padding:8px;{align_style}'
         return f'<{tag} style="{border_style}">{text}</{tag}>\n'
-    
-    def render_heading(self, text: str, level: int, **attrs) -> str:
-        """Render heading with WeChat-compatible styling."""
-        sizes = {1: '24px', 2: '22px', 3: '20px', 4: '18px', 5: '16px', 6: '15px'}
-        size = sizes.get(level, '16px')
-        margin = f'margin:{20-level*2}px 0 10px;'
-        return f'<h{level} style="{margin}font-size:{size};font-weight:bold;">{text}</h{level}>\n'
-    
-    def render_paragraph(self, text: str, **attrs) -> str:
-        """Render paragraph."""
-        return f'<p style="margin:10px 0;line-height:1.8;">{text}</p>\n'
-    
-    def render_list(self, text: str, ordered: bool = False, **attrs) -> str:
-        """Render list with WeChat-compatible styling."""
-        tag = 'ol' if ordered else 'ul'
-        return f'<{tag} style="margin:10px 0;padding-left:20px;">{text}</{tag}>\n'
-    
-    def render_list_item(self, text: str, **attrs) -> str:
-        """Render list item."""
-        return f'<li style="margin:5px 0 5px 20px;">{text}</li>\n'
-    
-    def codespan(self, text: str) -> str:
-        """Render inline code with styling."""
-        return f'<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px;font-family:Consolas,Monaco,Menlo,monospace;font-size:13px;color:#1e6bb8;">{html_escape(text)}</code>'
     
     def get_code_blocks(self) -> List[str]:
         """Get all code blocks for separate rendering."""
@@ -250,39 +329,113 @@ class WeChatRenderer(mistune.HTMLRenderer):
         self._code_blocks = []
 
 
-def render_latex_to_katex(latex: str, display: bool = True) -> Optional[str]:
+def render_latex_to_svg(latex: str, display: bool = True) -> Optional[str]:
     """
-    Render LaTeX formula to HTML using KaTeX.
-    Returns HTML string with inline styles, or None if rendering fails.
-    Strips MathML wrapper for WeChat compatibility (WeChat doesn't support MathML).
+    Render LaTeX formula to SVG using mathjax-node.
+    Returns SVG string with inline styles for WeChat compatibility.
     """
     try:
-        import subprocess
-        import json
-        import os
+        pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        mathjax_node_path = os.path.join(pkg_dir, 'node_modules', 'mathjax-node')
         
+        latex_escaped = latex.replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"')
+        
+        node_script = f'''
+const mj = require('{mathjax_node_path}');
+mj.typeset({{
+    math: '{latex_escaped}',
+    format: 'TeX',
+    svg: true,
+    display: {str(display).lower()}
+}}, function(data) {{
+    if (data.errors) {{
+        console.log(JSON.stringify({{ error: data.errors.join(', ') }}));
+    }} else {{
+        console.log(JSON.stringify({{ svg: data.svg }}));
+    }}
+}});
+'''
+        
+        result = subprocess.run(
+            ['node', '-e', node_script],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            try:
+                data = json.loads(result.stdout.strip())
+                if 'error' in data:
+                    print(f"MathJax error: {data['error']}")
+                    return None
+                svg_content = data.get('svg', '')
+                
+                width_match = re.search(r'width="([^"]*)"', svg_content)
+                height_match = re.search(r'height="([^"]*)"', svg_content)
+                valign_match = re.search(r'vertical-align:\s*([^;"]*)', svg_content)
+                
+                if width_match:
+                    width_val = width_match.group(1)
+                    w_num = float(width_val.replace('ex', '').replace('em', '').replace('px', '') or '7.6')
+                else:
+                    w_num = 7.6
+                
+                if height_match:
+                    height_val = height_match.group(1)
+                    h_num = float(height_val.replace('ex', '').replace('em', '').replace('px', '') or '4.5')
+                else:
+                    h_num = 4.5
+                
+                valign = valign_match.group(1) if valign_match else f'-{h_num/3:.3f}ex'
+                
+                svg_content = re.sub(
+                    r'<svg([^>]*)>',
+                    f'<svg style="vertical-align:{valign};width:{w_num:.3f}ex;height:{h_num:.3f}ex;max-width:300% !important;" role="img" focusable="false" aria-hidden="true">',
+                    svg_content
+                )
+                
+                svg_content = re.sub(r'<title[^>]*>.*?</title>', '', svg_content, flags=re.DOTALL)
+                svg_content = re.sub(r' aria-labelledby="[^"]*"', '', svg_content)
+                
+                return svg_content
+            except json.JSONDecodeError:
+                print(f"JSON decode error: {result.stdout}")
+                return None
+        else:
+            print(f"MathJax node error: {result.stderr}")
+            return None
+    except Exception as e:
+        print(f"MathJax exception: {e}")
+        return None
+
+
+def render_latex_to_katex_svg(latex: str, display: bool = True) -> Optional[str]:
+    """
+    Render LaTeX formula to SVG using KaTeX.
+    Returns SVG string with inline styles for WeChat compatibility.
+    """
+    try:
         pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         katex_path = os.path.join(pkg_dir, 'node_modules', 'katex')
+        katex_dist = os.path.join(katex_path, 'dist', 'katex.min.js')
         
         node_script = f'''
 const katex = require('{katex_path}');
-const html = katex.renderToString({json.dumps(latex)}, {{
+const html = katex.renderToString('{latex}', {{
     displayMode: {str(display).lower()},
     throwOnError: false,
     trust: true,
     strict: false
 }});
-// Strip MathML wrapper - WeChat doesn't support <math> tags
-// Keep only the visual katex-html content
-const mathmlMatch = html.match(/<span class="katex-mathml">.*?<\\/span>/s);
-let visualHtml = html;
-if (mathmlMatch) {{
-    // Remove the MathML span but keep the rest
-    visualHtml = html.replace(/<span class="katex-mathml">.*?<\\/span>/s, '');
+
+// Extract SVG from katex HTML
+const svgMatch = html.match(/<svg[^>]*>.*?<\\/svg>/s);
+if (svgMatch) {{
+    console.log(svgMatch[0]);
+}} else {{
+    console.log('');
 }}
-// Also remove the aria-hidden attribute
-visualHtml = visualHtml.replace(/ aria-hidden="true"/g, '');
-console.log(visualHtml);
 '''
         
         result = subprocess.run(
@@ -293,18 +446,83 @@ console.log(visualHtml);
         )
         
         if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
+            svg = result.stdout.strip()
+            
+            style_match = re.search(r'style="([^"]*)"', svg)
+            if style_match:
+                original_style = style_match.group(1)
+                new_style = original_style + ';max-width:300% !important;'
+                svg = svg.replace(original_style, new_style)
+            else:
+                svg = svg.replace('<svg', '<svg style="max-width:300% !important;"')
+            
+            return svg
         else:
-            print(f"KaTeX error: {result.stderr}")
+            print(f"KaTeX SVG error: {result.stderr}")
             return None
     except Exception as e:
-        print(f"KaTeX exception: {e}")
+        print(f"KaTeX SVG exception: {e}")
         return None
+
+
+def render_latex_simple(latex: str, display: bool = True) -> str:
+    """
+    Simple LaTeX rendering for WeChat - outputs formatted HTML without external dependencies.
+    """
+    processed = latex
+    
+    processed = re.sub(r'\\\\frac\{([^}]+)\}\{([^}]+)\}', r'<span style="display:inline-block;text-align:center;"><span style="display:block;border-bottom:1px solid currentcolor;padding-bottom:2px;">\1</span><span style="display:block;">\2</span></span>', processed)
+    
+    processed = re.sub(r'\\\\sqrt\{([^}]+)\}', r'√<span style="border-top:1px solid currentcolor;">\1</span>', processed)
+    
+    processed = re.sub(r'\\\\int_?\{?([^}]*?)\}?\^?\{?([^}]*?)\}?', r'∫<sub>\1</sub><sup>\2</sup>', processed)
+    
+    processed = re.sub(r'\\\\sum_?\{?([^}]*?)\}?\^?\{?([^}]*?)\}?', r'Σ<sub>\1</sub><sup>\2</sup>', processed)
+    
+    processed = re.sub(r'\^?\{([^}]+)\}', r'<sup>\1</sup>', processed)
+    processed = re.sub(r'_\{([^}]+)\}', r'<sub>\1</sub>', processed)
+    processed = re.sub(r'\^([a-zA-Z0-9])', r'<sup>\1</sup>', processed)
+    processed = re.sub(r'_([a-zA-Z0-9])', r'<sub>\1</sub>', processed)
+    
+    greek_letters = {
+        '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ',
+        '\\epsilon': 'ε', '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ',
+        '\\iota': 'ι', '\\kappa': 'κ', '\\lambda': 'λ', '\\mu': 'μ',
+        '\\nu': 'ν', '\\xi': 'ξ', '\\omicron': 'ο', '\\pi': 'π',
+        '\\rho': 'ρ', '\\sigma': 'σ', '\\tau': 'τ', '\\upsilon': 'υ',
+        '\\phi': 'φ', '\\chi': 'χ', '\\psi': 'ψ', '\\omega': 'ω',
+        '\\Alpha': 'Α', '\\Beta': 'Β', '\\Gamma': 'Γ', '\\Delta': 'Δ',
+        '\\Epsilon': 'Ε', '\\Zeta': 'Ζ', '\\Eta': 'Η', '\\Theta': 'Θ',
+        '\\Iota': 'Ι', '\\Kappa': 'Κ', '\\Lambda': 'Λ', '\\Mu': 'Μ',
+        '\\Nu': 'Ν', '\\Xi': 'Ξ', '\\Omicron': 'Ο', '\\Pi': 'Π',
+        '\\Rho': 'Ρ', '\\Sigma': 'Σ', '\\Tau': 'Τ', '\\Upsilon': 'Υ',
+        '\\Phi': 'Φ', '\\Chi': 'Χ', '\\Psi': 'Ψ', '\\Omega': 'Ω',
+    }
+    
+    for cmd, char in greek_letters.items():
+        processed = processed.replace(cmd, char)
+    
+    processed = processed.replace('\\infty', '∞')
+    processed = processed.replace('\\pm', '±')
+    processed = processed.replace('\\cdot', '·')
+    processed = processed.replace('\\times', '×')
+    processed = processed.replace('\\div', '÷')
+    processed = processed.replace('\\leq', '≤')
+    processed = processed.replace('\\geq', '≥')
+    processed = processed.replace('\\neq', '≠')
+    processed = processed.replace('\\approx', '≈')
+    processed = processed.replace('\\partial', '∂')
+    processed = processed.replace('\\nabla', '∇')
+    
+    processed = re.sub(r'\\\\[a-zA-Z]+', '', processed)
+    
+    return processed
 
 
 def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
     """
     Convert Markdown text to WeChat Public Account compatible HTML.
+    Output matches mdnice editor format with full inline styles.
     
     Args:
         markdown_text: Input markdown string
@@ -328,9 +546,11 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
             plugins=['strikethrough', 'table']
         )
         
-        html = md(markdown_text)
+        content_html = md(markdown_text)
         
-        html = post_process_latex(html)
+        content_html = post_process_latex(content_html)
+        
+        html = wrap_with_section(content_html)
         
         code_blocks = renderer.get_code_blocks()
         
@@ -356,7 +576,14 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
         )
 
 
-import io
+def wrap_with_section(content: str) -> str:
+    """Wrap content with mdnice-style section wrapper."""
+    return (
+        f'<section id="nice" {DATA_TOOL_ATTR} {WEBSITE_ATTR} style="{SECTION_WRAPPER_STYLE}">'
+        f'{content}'
+        f'</section>'
+    )
+
 
 LATEX_BLOCK_PATTERN = re.compile(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', re.DOTALL)
 LATEX_INLINE_PATTERN = re.compile(r'latex_inline_start(.+?)latex_inline_end')
@@ -364,37 +591,39 @@ LATEX_INLINE_PATTERN = re.compile(r'latex_inline_start(.+?)latex_inline_end')
 
 def process_latex(text):
     """Process LaTeX delimiters before markdown parsing."""
-    text = LATEX_BLOCK_PATTERN.sub(lambda m: f'<p>$${m.group(1).strip()}$$</p>', text)
-    text = LATEX_INLINE_PATTERN.sub(lambda m: f'${m.group(1).strip()}$', text)
+    text = re.sub(r'\$\$\s*([^$]+?)\s*\$\$', lambda m: f'<p>latex_block_start{m.group(1).strip()}latex_block_end</p>', text, flags=re.DOTALL)
+    text = re.sub(r'\$\s*([^$\n]+?)\s*\$', lambda m: f'latex_inline_start{m.group(1).strip()}latex_inline_end', text)
     return text
 
 
 def post_process_latex(text):
-    """Convert LaTeX markers to final HTML with KaTeX rendered content."""
+    """Convert LaTeX markers to final HTML with rendered formulas."""
     def latex_block_replace(match):
         content = match.group(1).strip()
-        katex_html = render_latex_to_katex(content, display=True)
-        if katex_html:
-            return f'<div style="text-align:center;margin:10px 0;">{katex_html}</div>'
-        return f'<p style="text-align:center;font-family:serif;">{content}</p>'
+        svg = render_latex_to_svg(content, display=True)
+        if svg:
+            return (
+                f'<span class="span-block-equation" style="cursor:pointer" {DATA_TOOL_ATTR}>'
+                f'<section class="block-equation" data-formula="{html_escape(content)}" style="'
+                f'text-align:center;overflow-x:auto;overflow-y:auto;display:block;">{svg}</section></span>\n'
+            )
+        simple = render_latex_simple(content, display=True)
+        return (
+            f'<p {DATA_TOOL_ATTR} style="text-align:center;font-family:serif;'
+            f'color:rgb(0,0,0);font-size:16px;line-height:1.8em;margin:10px 0;">{simple}</p>\n'
+        )
     
     def latex_inline_replace(match):
         content = match.group(1).strip()
-        katex_html = render_latex_to_katex(content, display=False)
-        if katex_html:
-            return katex_html
-        return f'<span style="font-family:serif;">{content}</span>'
+        svg = render_latex_to_svg(content, display=False)
+        if svg:
+            return f'<span class="span-inline-equation" style="cursor:pointer">{svg}</span>'
+        simple = render_latex_simple(content, display=False)
+        return f'<span style="font-family:serif;">{simple}</span>'
     
-    text = re.sub(r'<p>\s*\$\$(.+?)\$\$\s*</p>', latex_block_replace, text, flags=re.DOTALL)
-    text = re.sub(r'\$\$(.+?)\$\$', latex_block_replace, text, flags=re.DOTALL)
-    text = re.sub(r'\$(.+?)\$', latex_inline_replace, text)
-    
-    text = re.sub(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', 
-                  lambda m: f'<p>$${m.group(1).strip()}$$</p>', text, flags=re.DOTALL)
-    text = re.sub(r'latex_block_start(.+?)latex_block_end', 
-                  lambda m: f'$${m.group(1).strip()}$$', text)
-    text = re.sub(r'latex_inline_start(.+?)latex_inline_end', 
-                  lambda m: f'${m.group(1).strip()}$', text)
+    text = re.sub(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', latex_block_replace, text, flags=re.DOTALL)
+    text = re.sub(r'latex_block_start(.+?)latex_block_end', lambda m: latex_block_replace(m), text)
+    text = re.sub(r'latex_inline_start(.+?)latex_inline_end', latex_inline_replace, text)
     
     return text
 
@@ -417,7 +646,7 @@ def clean_html_for_wechat(html: str) -> str:
         if tag.lower() in allowed_tags:
             if tag.lower() == 'img':
                 safe_attrs = re.sub(r'src="[^"]*"', '', attrs)
-                safe_attrs = re.sub(r'alt="[^"]*"', '', safe_attrs)
+                safe_attrs = re.sub(r'alt="[^"]*"', '', attrs)
                 return f'<{tag} {safe_attrs}src=...>'
             return match.group(0)
         return ''
@@ -469,10 +698,7 @@ def create_wechat_copy_html(title: str, content: str, author: str = None) -> str
     """
     Create WeChat-compatible HTML specifically for copying to clipboard.
     Preserves inline styles and code blocks that WeChat supports.
-    Simplifies KaTeX HTML for better WeChat compatibility.
     """
-    content = simplify_katex_for_wechat(content)
-    
     author_html = f'<p style="text-align:right;color:#999;font-size:14px;">文/{author or ""}</p>' if author else ''
     
     html = f'''<div>
@@ -482,31 +708,5 @@ def create_wechat_copy_html(title: str, content: str, author: str = None) -> str
 {content}
 </div>
 </div>'''
-    
-    return html
-
-
-def simplify_katex_for_wechat(html: str) -> str:
-    """
-    Simplify KaTeX HTML for WeChat compatibility.
-    Removes complex CSS, keeps essential structure and SVG elements.
-    """
-    import re
-    
-    katex_display_pattern = re.compile(r'<span class="katex-display">(<span class="katex">.*?</span>)</span>', re.DOTALL)
-    html = katex_display_pattern.sub(r'\1', html)
-    
-    katex_pattern = re.compile(r'<span class="katex">(<span class="katex-html">.*?</span>)</span>', re.DOTALL)
-    html = katex_pattern.sub(r'\1', html)
-    
-    html = re.sub(r' style="[^"]*"', '', html)
-    
-    html = re.sub(r'<span class="(strut|pstrut|mspace|mord|mbin|mrel|mpunct|mn|mo|mi|text|vlist-t|vlist-r|vlist-s|mopen|mclose|nulldelimiter|frac-line|hide-tail)[^"]*"></span>', '', html)
-    html = re.sub(r'<span class="(sizing|mtight|msupsub|svg-align|displaystyle|small|large-ops|normal-size)[^"]*">(.*?)</span>', r'\2', html, flags=re.DOTALL)
-    
-    html = re.sub(r'<span class="[^"]*">(<[^>]+>)</span>', r'\1', html)
-    
-    html = re.sub(r'\s+', ' ', html)
-    html = re.sub(r'> <', '><', html)
     
     return html
