@@ -1,0 +1,8 @@
+include README.md
+include README_CN.md
+include LICENSE
+include requirements.txt
+recursive-include md2wx *.py
+recursive-include md2wx/templates *.html
+recursive-include tests *.py
+recursive-include data *.json

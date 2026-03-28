@@ -1,0 +1,66 @@
+{
+  "description": "Sample input for md2wx testing",
+  "version": "1.0.0",
+  "cases": [
+    {
+      "id": "case_001",
+      "name": "Basic text formatting",
+      "input": "Hello **World**",
+      "expected_output_contains": ["Hello", "World", "<strong>", "<b>"]
+    },
+    {
+      "id": "case_002",
+      "name": "Headings",
+      "input": "# Heading 1\n## Heading 2\n### Heading 3",
+      "expected_output_contains": ["<h1", "<h2", "<h3"]
+    },
+    {
+      "id": "case_003",
+      "name": "Links",
+      "input": "[Click here](https://example.com)",
+      "expected_output_contains": ["https://example.com", "Click here"]
+    },
+    {
+      "id": "case_004",
+      "name": "Code block",
+      "input": "```python\nprint('hello')\n```",
+      "expected_code_blocks_count": 1
+    },
+    {
+      "id": "case_005",
+      "name": "Blockquote",
+      "input": "> This is a quote",
+      "expected_output_contains": ["<blockquote"]
+    },
+    {
+      "id": "case_006",
+      "name": "Unordered list",
+      "input": "- Item 1\n- Item 2\n- Item 3",
+      "expected_output_contains": ["<ul>", "<li>"]
+    },
+    {
+      "id": "case_007",
+      "name": "Ordered list",
+      "input": "1. First\n2. Second\n3. Third",
+      "expected_output_contains": ["<ol>", "<li>"]
+    },
+    {
+      "id": "case_008",
+      "name": "Table",
+      "input": "| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |",
+      "expected_output_contains": ["<table", "<th>", "<td>"]
+    },
+    {
+      "id": "case_009",
+      "name": "Image",
+      "input": "![Alt text](https://example.com/image.png)",
+      "expected_output_contains": ["<img", "https://example.com/image.png", "Alt text"]
+    },
+    {
+      "id": "case_010",
+      "name": "Mixed content",
+      "input": "# Title\n\nThis is **bold** and *italic*.\n\n```python\ndef test():\n    pass\n```\n\n- List item\n\n> Quote",
+      "expected_output_contains": ["<h1", "<strong", "<em", "<pre", "<ul", "<blockquote"]
+    }
+  ]
+}

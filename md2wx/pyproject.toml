@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "md2wx"
+version = "1.0.0"
+description = "Markdown to WeChat Public Account HTML converter"
+readme = "README.md"
+license = {text = "GPLv3"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Author", email = "author@example.com"}
+]
+keywords = ["markdown", "wechat", "converter", "html"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "mistune>=2.0.0",
+    "Pygments>=2.14.0",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.4.0"]
+web = ["Flask>=2.3.0"]
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
+all = ["PySide6>=6.4.0", "Flask>=2.3.0", "pytest>=7.0.0", "pytest-cov>=4.0.0"]
+
+[project.scripts]
+md2wx = "md2wx.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/cycleuser/md2wx"
+Documentation = "https://github.com/cycleuser/md2wx#readme"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["md2wx*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
