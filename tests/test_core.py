@@ -1,9 +1,9 @@
 """
-Test suite for md2wx.
+Test suite for xie.
 """
 import pytest
 
-from md2wx.core import (
+from xie.core import (
     convert_markdown_to_wechat,
     create_wechat_html_document,
     escape_html,
@@ -246,3 +246,55 @@ def hello():
         assert "<!DOCTYPE html>" in standalone
         assert "<title>My Document</title>" in standalone
         assert "Author" in standalone
+
+
+class TestLatex:
+    """Tests for LaTeX math support."""
+    
+    def test_inline_latex(self):
+        """Test inline LaTeX math."""
+        result = convert_markdown_to_wechat(r"Inline: $x^2 + y^2 = z^2$")
+        assert result.success
+        assert '<span style="font-size:16px;padding:0 2px;font-family:Times New Roman,serif;">x^2 + y^2 = z^2</span>' in result.data['html']
+    
+    def test_block_latex(self):
+        """Test block LaTeX math."""
+        result = convert_markdown_to_wechat(r"$$\int_0^\infty e^{-x^2} dx$$")
+        assert result.success
+        assert '<div style="text-align:center;margin:15px 0;padding:15px;background:#f9f9f9;border-radius:8px;font-size:16px;line-height:1.8;font-family:Times New Roman,serif;">' in result.data['html']
+        assert r'\int_0^\infty' in result.data['html']
+    
+    def test_latex_with_frac(self):
+        """Test LaTeX with fractions."""
+        result = convert_markdown_to_wechat(r"$$\frac{\sqrt{\pi}}{2}$$")
+        assert result.success
+        assert r'\frac' in result.data['html']
+        assert r'\sqrt' in result.data['html']
+
+
+class TestCodeHighlighting:
+    """Tests for code highlighting with inline styles."""
+    
+    def test_code_block_highlighting(self):
+        """Test code block with syntax highlighting."""
+        result = convert_markdown_to_wechat("```python\ndef hello():\n    print('hi')\n```")
+        assert result.success
+        html = result.data['html']
+        assert '<pre' in html
+        assert 'span' in html
+        assert 'color:' in html
+        assert 'def' in html or 'hello' in html
+    
+    def test_inline_code_styling(self):
+        """Test inline code has proper styling."""
+        result = convert_markdown_to_wechat("Use `code` here")
+        assert result.success
+        assert 'code' in result.data['html']
+        assert 'color:#e83e8c' in result.data['html'] or 'color:#d73a49' in result.data['html']
+    
+    def test_code_block_no_class(self):
+        """Test that code blocks don't use CSS classes."""
+        result = convert_markdown_to_wechat("```python\nprint('hello')\n```")
+        assert result.success
+        html = result.data['html']
+        assert 'class=' not in html or 'span' in html

@@ -1,10 +1,10 @@
 """
-Unified Python API for md2wx.
+Unified Python API for xie.
 """
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from md2wx.core import (
+from xie.core import (
     convert_markdown_to_wechat,
     create_wechat_html_document,
     ToolResult as _ToolResult,
@@ -101,8 +101,8 @@ def convert(
 
 
 def get_version() -> str:
-    """Get the current version of md2wx."""
-    from md2wx import __version__
+    """Get the current version of xie."""
+    from xie import __version__
     return __version__
 
 

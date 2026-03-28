@@ -1,9 +1,9 @@
 """
-Web interface for md2wx using Flask.
+Web interface for xie using Flask.
 """
 from flask import Flask, render_template, jsonify, request
 
-from md2wx.core import convert_markdown_to_wechat, create_wechat_html_document
+from xie.core import convert_markdown_to_wechat, create_wechat_html_document
 
 
 app = Flask(__name__, template_folder='templates')
@@ -56,12 +56,12 @@ def convert():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "md2wx"})
+    return jsonify({"status": "ok", "service": "xie"})
 
 
 def run_server(host="127.0.0.1", port=5000, debug=False):
     """Run the Flask server."""
-    print(f"Starting MD2WX server at http://{host}:{port}")
+    print(f"Starting Xie server at http://{host}:{port}")
     app.run(host=host, port=port, debug=debug)
 
 

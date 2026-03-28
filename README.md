@@ -1,204 +1,114 @@
-# Markdown to WeChat HTML Converter
+# Xie
 
-A command-line tool and Python library for converting Markdown documents to WeChat Public Account (公众号) compatible HTML.
+Convert Markdown to WeChat-compatible HTML with a single command. Works as a CLI tool, Python library, GUI app, or web service.
 
-## Project Background
+## Why
 
-Markdown has become the de facto standard for technical documentation and content creation due to its simple syntax and readability. However, WeChat Public Account only supports a limited subset of HTML for formatting articles. This creates a friction point for content creators who write in Markdown but need to publish on WeChat.
+If you write in Markdown and publish to WeChat, you know the pain of formatting. WeChat only accepts a limited subset of HTML, so most Markdown-to-HTML converters produce code that just won't paste correctly.
 
-MD2WX solves this problem by providing a robust conversion pipeline that transforms standard Markdown into WeChat-compatible HTML. The tool handles the various complexities of WeChat's HTML restrictions, including supported tags, CSS constraints, and code block rendering.
+Xie handles this for you. It outputs clean, WeChat-compatible HTML with proper inline styles that paste directly into the WeChat editor.
 
-This project addresses the practical need for content creators, developers, and technical writers who maintain their content in Markdown format but need to publish on WeChat Public Accounts. By automating the conversion process, MD2WX saves significant manual effort and ensures consistent formatting across platforms.
+## Quick Start
 
-## Application Scenarios
+```bash
+# Install
+pip install xie
 
-**Technical Documentation Publishing**: Developers who write API documentation, tutorials, or technical blog posts in Markdown can now easily publish them to WeChat without manual HTML conversion.
+# Convert a file
+xie input.md -o output.html
 
-**Educational Content Creation**: Teachers and educators who create course materials in Markdown can distribute them through WeChat Public Accounts with proper formatting.
-
-**Software Product Announcements**: Product teams can maintain release notes and announcements in Markdown and publish them directly to WeChat with a single command.
-
-**Cross-Platform Content Distribution**: Content creators who publish to multiple platforms (blogs, Medium, GitHub) can use the same Markdown source for WeChat articles.
-
-## Hardware Compatibility
-
-MD2WX is a lightweight Python application with minimal hardware requirements:
-
-- **CPU**: Any modern x86_64 or ARM64 processor
-- **Memory**: Minimum 256MB RAM; 512MB recommended
-- **Storage**: Less than 50MB for installation
-- **No GPU required**: All processing is CPU-based
-
-## Operating Systems
-
-MD2WX supports all major operating systems:
-
-- **macOS**: macOS 10.13 (High Sierra) or later
-- **Linux**: Ubuntu 18.04+, Debian 10+, Fedora 30+, and most other Linux distributions with Python 3.8+
-- **Windows**: Windows 10 or later with WSL2 or native Python
-
-## Dependencies
-
-MD2WX requires Python 3.8 or higher. Core dependencies include:
-
-- **Python**: >= 3.8
-- **mistune**: >= 2.0.0 (Markdown parser)
-- **Pygments**: >= 2.14.0 (Syntax highlighting for code blocks)
-
-Optional dependencies:
-
-- **PySide6**: >= 6.4.0 (For GUI interface)
-- **Flask**: >= 2.3.0 (For web interface)
-- **pytest**: >= 7.0.0 (For testing)
+# Or pipe content
+echo "# Hello" | xie
+```
 
 ## Installation
 
-### From PyPI (Recommended)
-
 ```bash
-pip install md2wx
-```
+# From PyPI
+pip install xie
 
-### From Source
+# With GUI and web support
+pip install xie[all]
 
-```bash
-git clone https://github.com/cycleuser/md2wx.git
-cd md2wx
+# From source
+git clone https://github.com/cycleuser/xie.git
+cd xie
 pip install -e .
 ```
 
-### With All Dependencies
+## Three Ways to Use
+
+### CLI
 
 ```bash
-pip install md2wx[all]
+# Basic conversion
+xie article.md -o article.html
+
+# With standalone document (includes title, author, styles)
+xie article.md --standalone --title "My Post" --author "John" -o article.html
+
+# Programmatic JSON output
+xie article.md --json > result.json
 ```
 
-### Development Installation
-
-```bash
-git clone https://github.com/cycleuser/md2wx.git
-cd md2wx
-pip install -e .[dev]
-```
-
-## Usage
-
-### Command-Line Interface
-
-Convert a markdown file:
-
-```bash
-md2wx input.md -o output.html
-```
-
-Convert from stdin:
-
-```bash
-echo "# Hello World" | md2wx
-```
-
-Create standalone HTML with styles:
-
-```bash
-md2wx input.md --standalone --title "My Article" --author "John" -o output.html
-```
-
-Get JSON output for programmatic use:
-
-```bash
-md2wx input.md --json
-```
-
-Verbose mode:
-
-```bash
-md2wx -v input.md -o output.html
-```
-
-### Python API
+### Python Library
 
 ```python
-from md2wx import convert
+from xie import convert
 
 result = convert("# Hello\n\nThis is **bold** text", standalone=True)
-
 if result.success:
     print(result.html)
-else:
-    print(f"Error: {result.error}")
 ```
 
-### GUI Mode
-
-Launch the graphical interface:
+### GUI or Web
 
 ```bash
-md2wx gui
+# Launch desktop GUI
+xie gui
+
+# Start web server
+xie web --port 5000
 ```
 
-### Web Server Mode
+The web interface opens at http://localhost:5000. Write Markdown on the left, see the WeChat preview on the right, and click "Copy for WeChat" to grab formatted HTML ready to paste.
 
-Start the web interface:
+## Features
 
-```bash
-md2wx web --host 0.0.0.0 --port 5000
-```
+Xie supports the standard Markdown things: headers, bold, italic, links, images, code blocks, tables, blockquotes, lists.
 
-Then open http://localhost:5000 in your browser.
+It also handles:
 
-## Screenshots
+- **Syntax highlighting** for code blocks. Xie uses Pygments to highlight 100+ languages, with colors applied as inline styles (no external CSS).
+- **LaTeX math** via `$inline$` and `$$block$$` syntax.
+- **WeChat-specific styling** on links, images, and code blocks that matches WeChat's appearance.
 
-| GUI Interface | Web Interface |
-|:-------------:|:-------------:|
-| ![GUI](images/gui_placeholder.png) | ![Web](images/web_placeholder.png) |
-
-## CLI Help
+## Supported Syntax
 
 ```
-usage: md2wx [-h] [-V] [-v] [-o OUTPUT] [--json] [-q] [--title TITLE]
-             [--author AUTHOR] [--standalone]
-             [input]
-
-Convert Markdown to WeChat Public Account HTML
-
-positional arguments:
-  input                 Input markdown file or markdown text
-
-optional arguments:
-  -h, --help           show this help message and exit
-  -V, --version        show program's version number and exit
-  -v, --verbose        Verbose output
-  -o, --output         Output file path
-  --json               Output as JSON
-  -q, --quiet          Suppress output
-  --title              Document title (default: 'Untitled')
-  --author             Document author
-  --standalone         Create standalone HTML document with styles
+# Headers        **bold**       *italic*      ~~strikethrough~~
+[links](url)    ![images](url)  `code`        ```language blocks
+> quotes         - lists         1. lists      | tables |
+$math$          $$block math$$
 ```
 
-## Supported Markdown Features
+## WeChat Compatibility
 
-- Headers (h1-h6)
-- Bold, italic, underline, strikethrough
-- Links with proper WeChat styling
-- Images with responsive sizing
-- Code blocks with syntax highlighting
-- Inline code
-- Blockquotes with WeChat-compatible styling
-- Ordered and unordered lists
-- Tables with proper borders
-- Horizontal rules
+WeChat doesn't accept arbitrary HTML. Xie only outputs tags and styles that WeChat allows:
 
-## WeChat Compatibility Notes
+- All styles are inline (no `<style>` tags or CSS classes)
+- Link color defaults to WeChat blue (#576b95)
+- Images scale responsively
+- Code blocks use inline colors instead of external stylesheets
 
-MD2WX generates HTML that complies with WeChat's content guidelines:
+## Requirements
 
-- Uses only supported HTML tags
-- Applies WeChat-compatible inline styles
-- Ensures images have responsive width
-- Formats code blocks for readability
-- Uses proper link colors (#576b95)
+- Python 3.8+
+- mistune for Markdown parsing
+- Pygments for code highlighting
+
+Optional: PySide6 for GUI, Flask for web server.
 
 ## License
 
-GPLv3. See [LICENSE](LICENSE) for details.
+GPLv3
