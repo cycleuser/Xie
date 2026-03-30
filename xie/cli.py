@@ -67,12 +67,6 @@ def convert_handler(args):
         print(f"[xie] Code blocks: {result.metadata.get('code_blocks_count', 0)}")
 
 
-def gui_handler(args):
-    """Launch GUI interface."""
-    from xie.gui import main as gui_main
-    gui_main()
-
-
 def web_handler(args):
     """Start web server."""
     from xie.app import run_server
@@ -136,8 +130,6 @@ def main():
         help="Create standalone HTML document with styles"
     )
     convert_parser.set_defaults(handler=convert_handler)
-    
-    subparsers.add_parser("gui", help="Launch GUI interface").set_defaults(handler=gui_handler)
     
     web_parser = subparsers.add_parser("web", help="Start web server")
     web_parser.add_argument(
