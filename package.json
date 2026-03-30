@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "katex": "^0.16.44"
+    "katex": "^0.16.9"
   },
   "dependencies": {
     "mathjax-node": "^2.1.1"

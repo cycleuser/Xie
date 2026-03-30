@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xie - Markdown to WeChat</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -246,20 +245,6 @@ $x^2$ $$integral$$"></textarea>
             setTimeout(() => t.className = 'toast', 2000);
         }
 
-        function processLatexForPreview(html) {
-            html = html.replace(/<p><img src="data:image\/png;base64,/g, '<p><img src="data:image/png;base64,');
-            return html;
-        }
-
-        function renderKatex() {
-            document.querySelectorAll('.katex-display').forEach(el => {
-                try { katex.render(el.textContent, el, {displayMode: true, throwOnError: false}); } catch(e) {}
-            });
-            document.querySelectorAll('.katex-inline').forEach(el => {
-                try { katex.render(el.textContent, el, {displayMode: false, throwOnError: false}); } catch(e) {}
-            });
-        }
-
         async function convert() {
             const input = document.getElementById('input').value;
             const title = document.getElementById('title').value;
@@ -291,11 +276,10 @@ $x^2$ $$integral$$"></textarea>
                     lastHtml = previewData.html;
                     copyHtml = copyData.html;
 
-                    document.getElementById('preview').innerHTML = processLatexForPreview(previewData.html);
+                    document.getElementById('preview').innerHTML = previewData.html;
                     document.getElementById('htmlView').textContent = copyHtml;
                     document.getElementById('metaText').textContent = `${previewData.metadata.input_length} chars | ${previewData.metadata.code_blocks_count} blocks`;
                     document.getElementById('statusText').textContent = 'Done';
-                    renderKatex();
                     toggleView();
                 } else {
                     showToast('Error: ' + (previewData.error || copyData.error), 'error');

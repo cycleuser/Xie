@@ -33,7 +33,7 @@ def convert():
     title = data.get('title', 'Untitled')
     author = data.get('author')
     
-    result = convert_markdown_to_wechat(markdown_text)
+    result = convert_markdown_to_wechat(markdown_text, wechat_compatible=True)
     
     if not result.success:
         return jsonify({
@@ -73,7 +73,7 @@ def convert_for_copy():
     title = data.get('title', 'Untitled')
     author = data.get('author')
     
-    result = convert_markdown_to_wechat(markdown_text)
+    result = convert_markdown_to_wechat(markdown_text, wechat_compatible=True)
     
     if not result.success:
         return jsonify({

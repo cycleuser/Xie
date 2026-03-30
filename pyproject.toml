@@ -4,14 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xie"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Markdown to WeChat Public Account HTML converter"
 readme = "README.md"
 license = {text = "GPLv3"}
 requires-python = ">=3.8"
-authors = [
-    {name = "Author", email = "author@example.com"}
-]
 keywords = ["markdown", "wechat", "converter", "html"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -22,6 +19,9 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+]
+authors = [
+    {name = "Akino", email = "wedonotuse@outlook.com"}
 ]
 
 dependencies = [
@@ -34,6 +34,9 @@ gui = ["PySide6>=6.4.0"]
 web = ["Flask>=2.3.0"]
 dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
 all = ["PySide6>=6.4.0", "Flask>=2.3.0", "pytest>=7.0.0", "pytest-cov>=4.0.0"]
+
+[tool.setuptools.dynamic]
+version = {attr = "xie.__version__"}
 
 [project.scripts]
 xie = "xie.cli:main"

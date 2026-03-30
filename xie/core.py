@@ -332,7 +332,7 @@ class WeChatRenderer(mistune.HTMLRenderer):
 def render_latex_to_svg(latex: str, display: bool = True) -> Optional[str]:
     """
     Render LaTeX formula to SVG using mathjax-node.
-    Returns SVG string with inline styles for WeChat compatibility.
+    Returns simplified SVG string for WeChat compatibility.
     """
     try:
         pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -371,8 +371,11 @@ mj.typeset({{
                     return None
                 svg_content = data.get('svg', '')
                 
+                svg_content = expand_svg_use_refs(svg_content)
+                
                 width_match = re.search(r'width="([^"]*)"', svg_content)
                 height_match = re.search(r'height="([^"]*)"', svg_content)
+                viewbox_match = re.search(r'viewBox="([^"]*)"', svg_content)
                 valign_match = re.search(r'vertical-align:\s*([^;"]*)', svg_content)
                 
                 if width_match:
@@ -387,16 +390,23 @@ mj.typeset({{
                 else:
                     h_num = 4.5
                 
-                valign = valign_match.group(1) if valign_match else f'-{h_num/3:.3f}ex'
+                valign = valign_match.group(1) if valign_match else '-1.5ex'
+                viewbox = viewbox_match.group(1) if viewbox_match else '0 -1000 3500 2000'
                 
                 svg_content = re.sub(
-                    r'<svg([^>]*)>',
-                    f'<svg style="vertical-align:{valign};width:{w_num:.3f}ex;height:{h_num:.3f}ex;max-width:300% !important;" role="img" focusable="false" aria-hidden="true">',
+                    r'<svg[^>]*>',
+                    f'<svg style="vertical-align:{valign};width:{w_num:.3f}ex;height:{h_num:.3f}ex;max-width:300% !important;" xmlns="http://www.w3.org/2000/svg" role="img" focusable="false" viewBox="{viewbox}">',
                     svg_content
                 )
                 
                 svg_content = re.sub(r'<title[^>]*>.*?</title>', '', svg_content, flags=re.DOTALL)
                 svg_content = re.sub(r' aria-labelledby="[^"]*"', '', svg_content)
+                svg_content = re.sub(r' xmlns:xlink="[^"]*"', '', svg_content)
+                svg_content = re.sub(r'<defs[^>]*>.*?</defs>', '', svg_content, flags=re.DOTALL)
+                svg_content = re.sub(r'\s+', ' ', svg_content)
+                svg_content = re.sub(r'>\s+<', '><', svg_content)
+                svg_content = re.sub(r'<\s+', '<', svg_content)
+                svg_content = re.sub(r'\s+>', '>', svg_content)
                 
                 return svg_content
             except json.JSONDecodeError:
@@ -410,32 +420,67 @@ mj.typeset({{
         return None
 
 
-def render_latex_to_katex_svg(latex: str, display: bool = True) -> Optional[str]:
+def expand_svg_use_refs(svg_content: str) -> str:
     """
-    Render LaTeX formula to SVG using KaTeX.
-    Returns SVG string with inline styles for WeChat compatibility.
+    Expand <use xlink:href="#id"> references to inline SVG content.
+    WeChat doesn't support xlink:href references.
+    """
+    defs = {}
+    
+    def_match = re.search(r'<defs[^>]*>(.*?)</defs>', svg_content, re.DOTALL)
+    if def_match:
+        defs_content = def_match.group(1)
+        for path_match in re.finditer(r'<path[^>]*id="([^"]+)"[^>]*d="([^"]+)"[^>]*/?\s*>', defs_content):
+            defs[path_match.group(1)] = path_match.group(2)
+    
+    def replace_use(match):
+        use_tag = match.group(0)
+        
+        href_match = re.search(r'xlink:href="#([^"]+)"', use_tag)
+        if not href_match:
+            return use_tag
+        
+        ref_id = href_match.group(1)
+        if ref_id not in defs:
+            return use_tag
+        
+        path_d = defs[ref_id]
+        
+        transform_match = re.search(r'transform="([^"]*)"', use_tag)
+        transform = transform_match.group(1) if transform_match else ''
+        
+        if transform:
+            return f'<path d="{path_d}" transform="{transform}" fill="currentColor"/>'
+        else:
+            return f'<path d="{path_d}" fill="currentColor"/>'
+    
+    svg_content = re.sub(r'<use[^>]*xlink:href="[^"]*"[^>]*>.*?</use>', replace_use, svg_content, flags=re.DOTALL)
+    svg_content = re.sub(r'<use[^>]*xlink:href="[^"]*"[^>]*/>', replace_use, svg_content)
+    
+    return svg_content
+
+
+def render_latex_to_html(latex: str, display: bool = True) -> Optional[str]:
+    """
+    Render LaTeX formula to HTML using KaTeX.
+    Returns KaTeX HTML output as-is for WeChat compatibility.
     """
     try:
         pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         katex_path = os.path.join(pkg_dir, 'node_modules', 'katex')
-        katex_dist = os.path.join(katex_path, 'dist', 'katex.min.js')
+        
+        latex_escaped = latex.replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"')
         
         node_script = f'''
 const katex = require('{katex_path}');
-const html = katex.renderToString('{latex}', {{
+const html = katex.renderToString('{latex_escaped}', {{
     displayMode: {str(display).lower()},
     throwOnError: false,
     trust: true,
-    strict: false
+    strict: false,
+    output: 'html'
 }});
-
-// Extract SVG from katex HTML
-const svgMatch = html.match(/<svg[^>]*>.*?<\\/svg>/s);
-if (svgMatch) {{
-    console.log(svgMatch[0]);
-}} else {{
-    console.log('');
-}}
+console.log(html);
 '''
         
         result = subprocess.run(
@@ -446,41 +491,42 @@ if (svgMatch) {{
         )
         
         if result.returncode == 0 and result.stdout.strip():
-            svg = result.stdout.strip()
-            
-            style_match = re.search(r'style="([^"]*)"', svg)
-            if style_match:
-                original_style = style_match.group(1)
-                new_style = original_style + ';max-width:300% !important;'
-                svg = svg.replace(original_style, new_style)
-            else:
-                svg = svg.replace('<svg', '<svg style="max-width:300% !important;"')
-            
-            return svg
+            html_content = result.stdout.strip()
+            return html_content
         else:
-            print(f"KaTeX SVG error: {result.stderr}")
+            print(f"KaTeX error: {result.stderr}")
             return None
     except Exception as e:
-        print(f"KaTeX SVG exception: {e}")
+        print(f"KaTeX exception: {e}")
+        return None
+    except Exception as e:
+        print(f"KaTeX exception: {e}")
         return None
 
 
 def render_latex_simple(latex: str, display: bool = True) -> str:
     """
     Simple LaTeX rendering for WeChat - outputs formatted HTML without external dependencies.
+    Uses unicode math symbols where possible.
     """
     processed = latex
     
-    processed = re.sub(r'\\\\frac\{([^}]+)\}\{([^}]+)\}', r'<span style="display:inline-block;text-align:center;"><span style="display:block;border-bottom:1px solid currentcolor;padding-bottom:2px;">\1</span><span style="display:block;">\2</span></span>', processed)
+    processed = re.sub(r'\\frac\s*\{([^}]+)\}\s*\{([^}]+)\}', 
+                       r'<span style="display:inline-block;text-align:center;vertical-align:-50%;"><span style="display:block;border-bottom:1px solid currentColor;margin-bottom:1px;">\1</span><span style="display:block;">\2</span></span>', 
+                       processed)
     
-    processed = re.sub(r'\\\\sqrt\{([^}]+)\}', r'√<span style="border-top:1px solid currentcolor;">\1</span>', processed)
+    processed = re.sub(r'\\sqrt\s*\{([^}]+)\}', r'√(\1)', processed)
     
-    processed = re.sub(r'\\\\int_?\{?([^}]*?)\}?\^?\{?([^}]*?)\}?', r'∫<sub>\1</sub><sup>\2</sup>', processed)
+    processed = re.sub(r'\\int[_]?(\{[^}]+\})?(\^[^{]+)?', 
+                       lambda m: '∫' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
+                       processed)
     
-    processed = re.sub(r'\\\\sum_?\{?([^}]*?)\}?\^?\{?([^}]*?)\}?', r'Σ<sub>\1</sub><sup>\2</sup>', processed)
+    processed = re.sub(r'\\sum[_]?(\{[^}]+\})?(\^[^{]+)?', 
+                       lambda m: 'Σ' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
+                       processed)
     
-    processed = re.sub(r'\^?\{([^}]+)\}', r'<sup>\1</sup>', processed)
-    processed = re.sub(r'_\{([^}]+)\}', r'<sub>\1</sub>', processed)
+    processed = re.sub(r'\^{([^}]+)}', r'<sup>\1</sup>', processed)
+    processed = re.sub(r'_{([^}]+)}', r'<sub>\1</sub>', processed)
     processed = re.sub(r'\^([a-zA-Z0-9])', r'<sup>\1</sup>', processed)
     processed = re.sub(r'_([a-zA-Z0-9])', r'<sub>\1</sub>', processed)
     
@@ -514,7 +560,7 @@ def render_latex_simple(latex: str, display: bool = True) -> str:
     processed = processed.replace('\\partial', '∂')
     processed = processed.replace('\\nabla', '∇')
     
-    processed = re.sub(r'\\\\[a-zA-Z]+', '', processed)
+    processed = re.sub(r'\\[a-zA-Z]+', '', processed)
     
     return processed
 
@@ -527,6 +573,7 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
     Args:
         markdown_text: Input markdown string
         **kwargs: Additional conversion options
+            - wechat_compatible: bool, if True use simplified formula output for WeChat
         
     Returns:
         ToolResult with converted HTML and metadata
@@ -538,6 +585,8 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
                 error="Input must be a string"
             )
         
+        wechat_mode = kwargs.get('wechat_compatible', False)
+        
         markdown_text = process_latex(markdown_text)
         
         renderer = WeChatRenderer()
@@ -548,7 +597,7 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
         
         content_html = md(markdown_text)
         
-        content_html = post_process_latex(content_html)
+        content_html = post_process_latex(content_html, wechat_mode=wechat_mode)
         
         html = wrap_with_section(content_html)
         
@@ -558,6 +607,7 @@ def convert_markdown_to_wechat(markdown_text: str, **kwargs) -> ToolResult:
             'code_blocks_count': len(code_blocks),
             'input_length': len(markdown_text),
             'output_length': len(html),
+            'wechat_mode': wechat_mode,
         }
         
         return ToolResult(
@@ -585,21 +635,23 @@ def wrap_with_section(content: str) -> str:
     )
 
 
-LATEX_BLOCK_PATTERN = re.compile(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', re.DOTALL)
-LATEX_INLINE_PATTERN = re.compile(r'latex_inline_start(.+?)latex_inline_end')
-
-
 def process_latex(text):
     """Process LaTeX delimiters before markdown parsing."""
-    text = re.sub(r'\$\$\s*([^$]+?)\s*\$\$', lambda m: f'<p>latex_block_start{m.group(1).strip()}latex_block_end</p>', text, flags=re.DOTALL)
-    text = re.sub(r'\$\s*([^$\n]+?)\s*\$', lambda m: f'latex_inline_start{m.group(1).strip()}latex_inline_end', text)
+    text = re.sub(r'\$\$\s*([^$]+?)\s*\$\$', lambda m: f'LATEXBLOCKSTART{m.group(1).strip()}LATEXBLOCKEND', text, flags=re.DOTALL)
+    text = re.sub(r'\$\s*([^$\n]+?)\s*\$', lambda m: f'latexinlinestart{m.group(1).strip()}latexinlineend', text)
     return text
 
 
-def post_process_latex(text):
+def post_process_latex(text, wechat_mode=False):
     """Convert LaTeX markers to final HTML with rendered formulas."""
     def latex_block_replace(match):
         content = match.group(1).strip()
+        if wechat_mode:
+            simple = render_latex_simple(content, display=True)
+            return (
+                f'<span style="display:block;text-align:center;font-family:serif;'
+                f'color:rgb(0,0,0);font-size:16px;line-height:1.8em;margin:10px 0;">{simple}</span>\n'
+            )
         svg = render_latex_to_svg(content, display=True)
         if svg:
             return (
@@ -609,21 +661,24 @@ def post_process_latex(text):
             )
         simple = render_latex_simple(content, display=True)
         return (
-            f'<p {DATA_TOOL_ATTR} style="text-align:center;font-family:serif;'
-            f'color:rgb(0,0,0);font-size:16px;line-height:1.8em;margin:10px 0;">{simple}</p>\n'
+            f'<span style="display:block;text-align:center;font-family:serif;'
+            f'color:rgb(0,0,0);font-size:16px;line-height:1.8em;margin:10px 0;">{simple}</span>\n'
         )
     
     def latex_inline_replace(match):
         content = match.group(1).strip()
+        if wechat_mode:
+            simple = render_latex_simple(content, display=False)
+            return f'<span style="font-family:serif;">{simple}</span>'
         svg = render_latex_to_svg(content, display=False)
         if svg:
             return f'<span class="span-inline-equation" style="cursor:pointer">{svg}</span>'
         simple = render_latex_simple(content, display=False)
         return f'<span style="font-family:serif;">{simple}</span>'
     
-    text = re.sub(r'<p>\s*latex_block_start(.+?)latex_block_end\s*</p>', latex_block_replace, text, flags=re.DOTALL)
-    text = re.sub(r'latex_block_start(.+?)latex_block_end', lambda m: latex_block_replace(m), text)
-    text = re.sub(r'latex_inline_start(.+?)latex_inline_end', latex_inline_replace, text)
+    text = re.sub(r'<p>\s*LATEXBLOCKSTART(.+?)LATEXBLOCKEND\s*</p>', latex_block_replace, text, flags=re.DOTALL)
+    text = re.sub(r'LATEXBLOCKSTART(.+?)LATEXBLOCKEND', lambda m: latex_block_replace(m), text)
+    text = re.sub(r'latexinlinestart(.+?)latexinlineend', latex_inline_replace, text)
     
     return text
 

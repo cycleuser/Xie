@@ -5,9 +5,9 @@ A tool for converting Markdown documents to WeChat-compatible HTML
 that can be directly pasted into WeChat public account articles.
 """
 
-__version__ = "1.0.0"
-__author__ = "Author"
-__email__ = "author@example.com"
+__version__ = "1.0.1"
+__author__ = "Akino"
+__email__ = "wedonotuse@outlook.com"
 
 from xie.core import (
     convert_markdown_to_wechat,
