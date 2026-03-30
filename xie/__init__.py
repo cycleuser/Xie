@@ -5,7 +5,7 @@ A tool for converting Markdown documents to WeChat-compatible HTML
 that can be directly pasted into WeChat public account articles.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "Akino"
 __email__ = "wedonotuse@outlook.com"
 
