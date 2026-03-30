@@ -14,7 +14,7 @@ Xie is a Python CLI tool and library for converting Markdown to WeChat Public Ac
 # Basic install
 pip install -e .
 
-# With all dependencies (GUI, web, dev tools)
+# With all dependencies (web, dev tools)
 pip install -e .[all]
 
 # Dev install (testing only)
@@ -67,7 +67,7 @@ python -m twine upload dist/*
 Order imports in three blocks separated by blank lines:
 
 1. Standard library (`re`, `dataclasses`, `typing`, `argparse`, etc.)
-2. Third-party packages (`mistune`, `pygments`, `PySide6`, `flask`)
+2. Third-party packages (`mistune`, `pygments`, `flask`)
 3. Local project imports (`xie.core`, etc.)
 
 ```python
@@ -179,7 +179,6 @@ xie/
 ├── core.py           # Core conversion logic, WeChatRenderer, ToolResult
 ├── api.py            # High-level Python API with convert() function
 ├── cli.py            # Command-line interface
-├── gui.py            # PySide6 GUI implementation
 ├── app.py            # Flask web server
 └── templates/        # Flask HTML templates
     └── index.html
@@ -187,6 +186,8 @@ tests/
 ├── __init__.py
 ├── conftest.py       # Pytest fixtures (sample_markdown, simple_markdown)
 └── test_core.py      # All tests
+images/
+└── web.png           # Screenshot for README
 ```
 
 ### Public API (`__all__`)
@@ -206,7 +207,7 @@ __all__ = [
 
 ### Version Number
 
-**Single source of truth**: `xie/__init__.py` contains `__version__ = "1.0.0"`.
+**Single source of truth**: `xie/__init__.py` contains `__version__ = "1.0.2"`.
 
 To update the version:
 1. Edit `xie/__init__.py` - change `__version__`

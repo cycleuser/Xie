@@ -21,6 +21,14 @@ def convert_handler(args):
             print("Error: No input provided. Provide a file path or pipe input.", file=sys.stderr)
             sys.exit(1)
         args.input = sys.stdin.read()
+    else:
+        input_path = Path(args.input)
+        if input_path.exists() and input_path.is_file():
+            try:
+                args.input = input_path.read_text(encoding='utf-8')
+            except Exception as e:
+                print(f"Error reading file: {e}", file=sys.stderr)
+                sys.exit(1)
     
     if args.verbose and not args.quiet:
         print(f"[xie] Processing input ({len(args.input)} chars)...")

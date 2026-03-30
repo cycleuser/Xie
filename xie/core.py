@@ -511,25 +511,6 @@ def render_latex_simple(latex: str, display: bool = True) -> str:
     """
     processed = latex
     
-    processed = re.sub(r'\\frac\s*\{([^}]+)\}\s*\{([^}]+)\}', 
-                       r'<span style="display:inline-block;text-align:center;vertical-align:-50%;"><span style="display:block;border-bottom:1px solid currentColor;margin-bottom:1px;">\1</span><span style="display:block;">\2</span></span>', 
-                       processed)
-    
-    processed = re.sub(r'\\sqrt\s*\{([^}]+)\}', r'√(\1)', processed)
-    
-    processed = re.sub(r'\\int[_]?(\{[^}]+\})?(\^[^{]+)?', 
-                       lambda m: '∫' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
-                       processed)
-    
-    processed = re.sub(r'\\sum[_]?(\{[^}]+\})?(\^[^{]+)?', 
-                       lambda m: 'Σ' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
-                       processed)
-    
-    processed = re.sub(r'\^{([^}]+)}', r'<sup>\1</sup>', processed)
-    processed = re.sub(r'_{([^}]+)}', r'<sub>\1</sub>', processed)
-    processed = re.sub(r'\^([a-zA-Z0-9])', r'<sup>\1</sup>', processed)
-    processed = re.sub(r'_([a-zA-Z0-9])', r'<sub>\1</sub>', processed)
-    
     greek_letters = {
         '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ',
         '\\epsilon': 'ε', '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ',
@@ -559,6 +540,25 @@ def render_latex_simple(latex: str, display: bool = True) -> str:
     processed = processed.replace('\\approx', '≈')
     processed = processed.replace('\\partial', '∂')
     processed = processed.replace('\\nabla', '∇')
+    
+    processed = re.sub(r'\\frac\s*\{([^}]+)\}\s*\{([^}]+)\}', 
+                       r'<span style="display:inline-block;text-align:center;vertical-align:-50%;"><span style="display:block;border-bottom:1px solid currentColor;margin-bottom:1px;">\1</span><span style="display:block;">\2</span></span>', 
+                       processed)
+    
+    processed = re.sub(r'\\sqrt\s*\{([^}]+)\}', r'√(\1)', processed)
+    
+    processed = re.sub(r'\\int[_]?(\{[^}]+\})?(\^[^{]+)?', 
+                       lambda m: '∫' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
+                       processed)
+    
+    processed = re.sub(r'\\sum[_]?(\{[^}]+\})?(\^[^{]+)?', 
+                       lambda m: 'Σ' + (m.group(1)[1:-1] if m.group(1) else '') + (m.group(2)[1:] if m.group(2) else ''), 
+                       processed)
+    
+    processed = re.sub(r'\^{([^}]+)}', r'<sup>\1</sup>', processed)
+    processed = re.sub(r'_{([^}]+)}', r'<sub>\1</sub>', processed)
+    processed = re.sub(r'\^([a-zA-Z0-9])', r'<sup>\1</sup>', processed)
+    processed = re.sub(r'_([a-zA-Z0-9])', r'<sub>\1</sub>', processed)
     
     processed = re.sub(r'\\[a-zA-Z]+', '', processed)
     
@@ -636,9 +636,22 @@ def wrap_with_section(content: str) -> str:
 
 
 def process_latex(text):
-    """Process LaTeX delimiters before markdown parsing."""
+    """Process LaTeX delimiters before markdown parsing. Protects code blocks."""
+    code_blocks = []
+    
+    def save_code(match):
+        code_blocks.append(match.group(0))
+        return f'\x00CODEBLOCK{len(code_blocks)-1}\x00'
+    
+    text = re.sub(r'```[\s\S]*?```', save_code, text)
+    text = re.sub(r'`[^`]+`', save_code, text)
+    
     text = re.sub(r'\$\$\s*([^$]+?)\s*\$\$', lambda m: f'LATEXBLOCKSTART{m.group(1).strip()}LATEXBLOCKEND', text, flags=re.DOTALL)
     text = re.sub(r'\$\s*([^$\n]+?)\s*\$', lambda m: f'latexinlinestart{m.group(1).strip()}latexinlineend', text)
+    
+    for i, code in enumerate(code_blocks):
+        text = text.replace(f'\x00CODEBLOCK{i}\x00', code)
+    
     return text
 
 

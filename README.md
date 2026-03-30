@@ -1,6 +1,8 @@
 # Xie
 
-Convert Markdown to WeChat-compatible HTML with a single command. Works as a CLI tool, Python library, GUI app, or web service.
+Convert Markdown to WeChat-compatible HTML with a single command. Works as a CLI tool, Python library, or web service.
+
+**Xie** (写) means "to write" in Chinese.
 
 ## Why
 
@@ -15,7 +17,7 @@ Xie handles this for you. It outputs clean, WeChat-compatible HTML with proper i
 pip install xie
 
 # Convert a file
-xie input.md -o output.html
+xie convert test.md -o test.html
 
 # Or pipe content
 echo "# Hello" | xie
@@ -27,7 +29,7 @@ echo "# Hello" | xie
 # From PyPI
 pip install xie
 
-# With GUI and web support
+# With web support
 pip install xie[all]
 
 # From source
@@ -36,52 +38,48 @@ cd xie
 pip install -e .
 ```
 
-## Three Ways to Use
+## Usage
 
 ### CLI
 
 ```bash
 # Basic conversion
-xie article.md -o article.html
+xie convert test.md -o test.html
 
 # With standalone document (includes title, author, styles)
-xie article.md --standalone --title "My Post" --author "John" -o article.html
+xie convert test.md --standalone --title "My Post" --author "John" -o test.html
 
-# Programmatic JSON output
-xie article.md --json > result.json
+# JSON output
+xie convert test.md --json
 ```
 
 ### Python Library
 
 ```python
-from xie import convert
+from xie import convert_markdown_to_wechat
 
-result = convert("# Hello\n\nThis is **bold** text", standalone=True)
+result = convert_markdown_to_wechat("# Hello\n\nThis is **bold** text")
 if result.success:
-    print(result.html)
+    print(result.data['html'])
 ```
 
-### GUI or Web
+### Web Service
 
 ```bash
-# Launch desktop GUI
-xie gui
-
 # Start web server
 xie web --port 5000
 ```
 
-The web interface opens at http://localhost:5000. Write Markdown on the left, see the WeChat preview on the right, and click "Copy for WeChat" to grab formatted HTML ready to paste.
+Open http://localhost:5000 in your browser. Write Markdown on the left, see the WeChat preview on the right, and click "Copy" to grab formatted HTML ready to paste.
+
+![Web Interface](images/web.png)
 
 ## Features
 
-Xie supports the standard Markdown things: headers, bold, italic, links, images, code blocks, tables, blockquotes, lists.
-
-It also handles:
-
-- **Syntax highlighting** for code blocks. Xie uses Pygments to highlight 100+ languages, with colors applied as inline styles (no external CSS).
-- **LaTeX math** via `$inline$` and `$$block$$` syntax.
-- **WeChat-specific styling** on links, images, and code blocks that matches WeChat's appearance.
+- **Full Markdown support**: headers, bold, italic, links, images, code blocks, tables, blockquotes, lists
+- **Syntax highlighting** for code blocks with 100+ languages (Pygments)
+- **LaTeX math** via `$inline$` and `$$block$$` syntax
+- **WeChat-compatible output**: all styles inline, no external CSS
 
 ## Supported Syntax
 
@@ -92,22 +90,39 @@ It also handles:
 $math$          $$block math$$
 ```
 
-## WeChat Compatibility
+## Example
 
-WeChat doesn't accept arbitrary HTML. Xie only outputs tags and styles that WeChat allows:
+Input (`test.md`):
 
-- All styles are inline (no `<style>` tags or CSS classes)
-- Link color defaults to WeChat blue (#576b95)
-- Images scale responsively
-- Code blocks use inline colors instead of external stylesheets
+```markdown
+# 一级标题
+
+## 二级标题
+
+**加粗**
+
+* 分点1
+* 分点2
+
+> 引用
+
+$$
+\Sigma_e^t= \frac{1}{2}
+$$
+
+```python
+print("hello")
+```
+```
+
+Output: WeChat-compatible HTML with inline styles.
 
 ## Requirements
 
 - Python 3.8+
-- mistune for Markdown parsing
-- Pygments for code highlighting
-
-Optional: PySide6 for GUI, Flask for web server.
+- mistune (Markdown parsing)
+- Pygments (code highlighting)
+- Flask (optional, for web server)
 
 ## License
 
